@@ -1,3 +1,4 @@
+import html
 import random
 import string
 import requests
@@ -43,16 +44,20 @@ async def create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         f"Room created successfully!\n\n"
-        f"Room Code: {room_code}\n\n"
-        f"Share this code with Player 2 and ask them to type:\n/join {room_code}\n\n"
-        f"Waiting for Player 2 to join..."
+        f"Room Code: <code>{room_code}</code>\n\n"
+        f"Share this code with Player 2 and ask them to type:\n<code>/join {room_code}</code>\n\n"
+        f"Waiting for Player 2 to join...",
+        parse_mode="HTML"
     )
 
 async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     if not context.args:
-        await update.message.reply_text("Please provide a Room Code. Example: /join ABC123")
+        await update.message.reply_text(
+            "Please provide a Room Code. Example: <code>/join ABC123</code>",
+            parse_mode="HTML"
+        )
         return
         
     room_code = context.args[0].upper()
@@ -74,19 +79,24 @@ async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
+    p1_name_safe = html.escape(str(room['p1_name']))
+    p2_name_safe = html.escape(str(user.first_name))
+    
     await update.message.reply_text(
-        f"Successfully joined Room {room_code}!\n\n"
-        f"Host: {room['p1_name']}\n\n"
+        f"Successfully joined Room <code>{room_code}</code>!\n\n"
+        f"Host: <b>{p1_name_safe}</b>\n\n"
         f"Please click Ready button below when you are prepared.",
-        reply_markup=reply_markup
+        reply_markup=reply_markup,
+        parse_mode="HTML"
     )
 
     try:
         host_id = int(room["p1"])
         await context.bot.send_message(
             chat_id=host_id,
-            text=f"Player 2 ({user.first_name}) has joined your Room {room_code}!\n\nPlease click Ready button below.",
-            reply_markup=reply_markup
+            text=f"Player 2 (<b>{p2_name_safe}</b>) has joined your Room <code>{room_code}</code>!\n\nPlease click Ready button below.",
+            reply_markup=reply_markup,
+            parse_mode="HTML"
         )
     except Exception as e:
         print(f"Failed to notify host: {e}")
