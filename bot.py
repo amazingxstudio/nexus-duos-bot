@@ -119,4 +119,3 @@ if __name__ == '__main__':
     
     print("Bot with Firebase is running...")
     app.run_polling()
-  
