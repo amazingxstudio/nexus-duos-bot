@@ -42,10 +42,10 @@ async def create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_to_firebase(f"rooms/{room_code}", room_data)
     
     await update.message.reply_text(
-        f"Room created successfully!\n\n"
+        f"Room created successfully!✅\n\n"
         f"Room Code: `{room_code}`\n\n"
-        f"Share this code with Another Player and ask them to type:\n`/join {room_code}`\n\n"
-        f"Waiting for Another Player to join...",
+        f"Share this code with another Player \n`/join {room_code}`\n\n"
+        f"Waiting for Another Player to join.",
         parse_mode="Markdown"
     )
 
