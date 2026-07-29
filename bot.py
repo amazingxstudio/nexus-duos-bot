@@ -75,9 +75,10 @@ async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"{room['p1_name']} and {user.first_name} are connected!\n\n"
-        f"Both players please click the Ready button.", 
-        reply_markup=reply_markup
+        f"Successfully joined Room `{room_code}`!\n\n"
+        f"Click the Ready button below when you are prepared.",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
     )
 
 async def handle_ready(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -103,11 +104,12 @@ async def handle_ready(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if room["p1_ready"] and room["p2_ready"]:
         save_to_firebase(f"rooms/{room_code}/status", "ready")
         await query.edit_message_text(
-            "Both players are ready!\n\n"
-            "Data saved to database successfully."
+            "Both players are ready!\n\nData saved to database successfully."
         )
     else:
-        await query.message.reply_text(f"{query.from_user.first_name} is ready. Waiting for the other player...")
+        await query.edit_message_text(
+            f"You are READY! Waiting for the other player to click Ready..."
+        )
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).read_timeout(30).write_timeout(30).connect_timeout(30).build()
@@ -119,3 +121,4 @@ if __name__ == '__main__':
     
     print("Bot with Firebase is running...")
     app.run_polling()
+    
