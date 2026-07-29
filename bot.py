@@ -43,17 +43,16 @@ async def create_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         f"Room created successfully!\n\n"
-        f"Room Code: `{room_code}`\n\n"
-        f"Share this code with Player 2 and ask them to type:\n`/join {room_code}`\n\n"
-        f"Waiting for Player 2 to join...",
-        parse_mode="Markdown"
+        f"Room Code: {room_code}\n\n"
+        f"Share this code with Player 2 and ask them to type:\n/join {room_code}\n\n"
+        f"Waiting for Player 2 to join..."
     )
 
 async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     if not context.args:
-        await update.message.reply_text("Please provide a Room Code. Example: `/join ABC123`", parse_mode="Markdown")
+        await update.message.reply_text("Please provide a Room Code. Example: /join ABC123")
         return
         
     room_code = context.args[0].upper()
@@ -75,22 +74,19 @@ async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Message to Player 2
     await update.message.reply_text(
-        f"Successfully joined Room `{room_code}`!\n\n"
+        f"Successfully joined Room {room_code}!\n\n"
         f"Host: {room['p1_name']}\n\n"
         f"Please click Ready button below when you are prepared.",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
+        reply_markup=reply_markup
     )
 
-    # Send notification & Ready button to Player 1 (Host)
     try:
+        host_id = int(room["p1"])
         await context.bot.send_message(
-            chat_id=room["p1"],
-            text=f"🎮 Player 2 ({user.first_name}) has joined your Room `{room_code}`!\n\nPlease click Ready button below.",
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
+            chat_id=host_id,
+            text=f"Player 2 ({user.first_name}) has joined your Room {room_code}!\n\nPlease click Ready button below.",
+            reply_markup=reply_markup
         )
     except Exception as e:
         print(f"Failed to notify host: {e}")
@@ -118,20 +114,18 @@ async def handle_ready(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if room["p1_ready"] and room["p2_ready"]:
         save_to_firebase(f"rooms/{room_code}/status", "ready")
         
-        finish_msg = "🎉 Both players are ready!\n\nGame setup complete in Firebase."
+        finish_msg = "Both players are ready!\n\nGame setup complete in Firebase."
         
-        # Update clicking player's UI
         await query.edit_message_text(finish_msg)
         
-        # Notify the other player as well
-        other_user_id = room["p2"] if user_id == room["p1"] else room["p1"]
+        other_user_id = int(room["p2"]) if user_id == int(room["p1"]) else int(room["p1"])
         try:
             await context.bot.send_message(chat_id=other_user_id, text=finish_msg)
         except Exception as e:
             print(f"Failed to notify other player: {e}")
     else:
         await query.edit_message_text(
-            f"You are READY! ⏳ Waiting for the other player to click Ready..."
+            "You are READY! Waiting for the other player to click Ready..."
         )
 
 if __name__ == '__main__':
@@ -143,4 +137,4 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(handle_ready, pattern="^ready_"))
     
     print("Bot with Firebase is running...")
-    app.run_polling)
+    app.run_polling()
