@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 
 TOKEN = "8907138819:AAFaoYPga8s6KqwfSy6z2d0jACa1CA8LZl4"
 FIREBASE_URL = "https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app"
-WEBAPP_URL = "https://your-github-username.github.io/telegram-game-bot/" # မင်းရဲ့ WebApp URL ထည့်ပါ
+WEBAPP_URL = "https://amazingxstudio.github.io/telegram-game-bot/" # မင်းရဲ့ WebApp URL ထည့်ပါ
 
 def generate_room_code():
     return ''.join(random.choices(string.digits, k=5))
