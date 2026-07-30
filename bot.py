@@ -1,127 +1,150 @@
 import random
 import string
-import requests
+import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = "8907138819:AAFaoYPga8s6KqwfSy6z2d0jACa1CA8LZl4"
-FIREBASE_URL = "https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app/"
+BOT_TOKEN = "8907138819:AAFaoYPga8s6KqwfSy6z2d0jACa1CA8LZl4"
+FIREBASE_URL = "https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app"
 WEBAPP_URL = "https://nexus-duos-bot.vercel.app/"
 
 def generate_room_code():
-    return ''.join(random.choices(string.digits, k=5))
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
-def save_to_firebase(path, data):
-    requests.put(f"{FIREBASE_URL}/{path}.json", json=data)
+async def fb_put(path: str, data: dict):
+    async with httpx.AsyncClient() as client:
+        await client.put(f"{FIREBASE_URL}/{path}.json", json=data)
 
-def get_from_firebase(path):
-    res = requests.get(f"{FIREBASE_URL}/{path}.json")
-    return res.json()
+async def fb_get(path: str):
+    async with httpx.AsyncClient() as client:
+        res = await client.get(f"{FIREBASE_URL}/{path}.json")
+        return res.json()
 
 async def sync_user_profile(user):
-    user_data = get_from_firebase(f"users/{user.id}")
+    user_id = str(user.id)
+    user_data = await fb_get(f"users/{user_id}")
     if not user_data:
         new_profile = {
-            "id": user.id,
+            "id": user_id,
             "username": user.username or user.first_name,
             "nickname": user.first_name,
             "photo_url": "",
-            "show_history_to_all": False,
+            "showHistory": False,
             "score": 0
         }
-        save_to_firebase(f"users/{user.id}", new_profile)
+        await fb_put(f"users/{user_id}", new_profile)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await sync_user_profile(user)
     
     keyboard = [
-        [InlineKeyboardButton("🎮 Open Game App", web_app=WebAppInfo(url=WEBAPP_URL))],
-        [InlineKeyboardButton("🎲 Create Room (Voting)", callback_data="mode_vote")],
-        [InlineKeyboardButton("❌ Tic-Tac-Toe Invite", callback_data="mode_game_tictactoe")],
-        [InlineKeyboardButton("✂️ Rock-Paper-Scissors Invite", callback_data="mode_game_rps")]
+        [InlineKeyboardButton("🎮 Open Game Hub", web_app=WebAppInfo(url=WEBAPP_URL))],
+        [InlineKeyboardButton("⚔️ Create Voting Room", callback_data="btn_create_room")]
     ]
     
+    welcome_text = (
+        f"👋 Welcome {user.first_name}!\n\n"
+        "🎮 Use the app to play games, practice vs AI, or invite friends.\n\n"
+        "Commands:\n"
+        "• /createroom - Create a multiplayer room with Game Voting\n"
+        "• /play <game> - Direct game (e.g., /play tictactoe, /play rps)\n"
+        "• /join <room_id> - Join a friend's room"
+    )
+    
     await update.message.reply_text(
-        f"Welcome {user.first_name}! ✅ Profile synced.\nChoose how you want to play:",
+        welcome_text,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user = query.from_user
-    data = query.data
-    
-    if data.startswith("mode_"):
-        game_type = None if data == "mode_vote" else data.replace("mode_game_", "")
-        room_code = generate_room_code()
-        
-        room_data = {
-            "p1": user.id,
-            "p1_name": user.first_name,
-            "p2": None,
-            "p2_name": None,
-            "specific_game": game_type,
-            "status": "waiting",
-            "p1_votes": [],
-            "p2_votes": []
-        }
-        save_to_firebase(f"rooms/{room_code}", room_data)
-        
-        game_str = f"Specific Game: `{game_type}`" if game_type else "Mode: `Voting Mode`"
-        await query.edit_message_text(
-            f"Room Created! ✅\n\nRoom Code: `{room_code}`\n{game_str}\n\n"
-            f"Send this command to another player:\n`/join {room_code}`",
-            parse_mode="Markdown"
-        )
-
-async def join_room(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def create_room_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await sync_user_profile(user)
     
-    if not context.args:
-        await update.message.reply_text("Please provide a Room Code. Example: `/join 12345`", parse_mode="Markdown")
-        return
-        
-    room_code = context.args[0]
-    room = get_from_firebase(f"rooms/{room_code}")
+    room_id = generate_room_code()
+    room_data = {
+        "id": room_id,
+        "host": str(user.id),
+        "hostName": user.first_name,
+        "mode": "voting",
+        "status": "waiting",
+        "createdAt": httpx.QueryParams({".sv": "timestamp"})
+    }
     
-    if not room:
-        await update.message.reply_text("Room not found or expired.")
-        return
-        
-    if room["p1"] == user.id:
-        await update.message.reply_text("You are the host of this room.")
-        return
-
-    save_to_firebase(f"rooms/{room_code}/p2", user.id)
-    save_to_firebase(f"rooms/{room_code}/p2_name", user.first_name)
-    save_to_firebase(f"rooms/{room_code}/status", "connected")
+    await fb_put(f"rooms/{room_id}", room_data)
     
-    app_link = f"{WEBAPP_URL}?room={room_code}"
-    keyboard = [[InlineKeyboardButton("🎮 Launch Room Web App", web_app=WebAppInfo(url=app_link))]]
+    invite_url = f"{WEBAPP_URL}?room={room_id}"
+    keyboard = [[InlineKeyboardButton("🚀 Join & Vote Game", web_app=WebAppInfo(url=invite_url))]]
     
     await update.message.reply_text(
-        f"Successfully ✅ joined Room `{room_code}`!\nClick below to launch game:",
+        f"✅ Voting Room Created!\nRoom ID: `{room_id}`\n\nInvite your friend to join!",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
 
-    try:
-        host_id = int(room["p1"])
-        await context.bot.send_message(
-            chat_id=host_id,
-            text=f"Another player ({user.first_name}) joined Room `{room_code}`! Click to launch:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    except Exception as e:
-        print(f"Host notification error: {e}")
+async def play_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    await sync_user_profile(user)
+    
+    if not context.args:
+        await update.message.reply_text("⚠️ Please specify a game. Example: `/play tictactoe` or `/play rps`", parse_mode="Markdown")
+        return
+        
+    game_id = context.args[0].lower()
+    if game_id not in ["tictactoe", "rps"]:
+        await update.message.reply_text("⚠️ Invalid game. Choose `tictactoe` or `rps`.", parse_mode="Markdown")
+        return
+
+    room_id = generate_room_code()
+    room_data = {
+        "id": room_id,
+        "host": str(user.id),
+        "hostName": user.first_name,
+        "mode": "direct",
+        "game": game_id,
+        "status": "waiting"
+    }
+    
+    await fb_put(f"rooms/{room_id}", room_data)
+    
+    invite_url = f"{WEBAPP_URL}?room={room_id}&game={game_id}"
+    keyboard = [[InlineKeyboardButton(f"🎯 Play {game_id.upper()}", web_app=WebAppInfo(url=invite_url))]]
+    
+    await update.message.reply_text(
+        f"✅ Direct Game Room Created ({game_id.upper()})!\nRoom ID: `{room_id}`\n\nClick below to launch:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+async def join_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    await sync_user_profile(user)
+    
+    if not context.args:
+        await update.message.reply_text("⚠️ Please provide a Room ID. Example: `/join A1B2C3`", parse_mode="Markdown")
+        return
+        
+    room_id = context.args[0].upper()
+    room_data = await fb_get(f"rooms/{room_id}")
+    
+    if not room_data:
+        await update.message.reply_text("❌ Room not found or expired.")
+        return
+
+    invite_url = f"{WEBAPP_URL}?room={room_id}"
+    if room_data.get("game"):
+        invite_url += f"&game={room_data.get('game')}"
+
+    keyboard = [[InlineKeyboardButton("🚀 Open Room", web_app=WebAppInfo(url=invite_url))]]
+    await update.message.reply_text(f"Joining Room `{room_id}`...", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("join", join_room))
-    app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(CommandHandler("createroom", create_room_cmd))
+    app.add_handler(CommandHandler("play", play_cmd))
+    app.add_handler(CommandHandler("join", join_cmd))
+    
     print("Bot is running...")
     app.run_polling()
