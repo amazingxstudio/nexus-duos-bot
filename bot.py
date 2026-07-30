@@ -5,8 +5,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 TOKEN = "8907138819:AAFaoYPga8s6KqwfSy6z2d0jACa1CA8LZl4"
-FIREBASE_URL = "https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app"
-WEBAPP_URL = "https://nexus-duos-bot.vercel.app"
+FIREBASE_URL = "https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app/"
+WEBAPP_URL = "https://nexus-duos-bot.vercel.app/"
 
 def generate_room_code():
     return ''.join(random.choices(string.digits, k=5))
