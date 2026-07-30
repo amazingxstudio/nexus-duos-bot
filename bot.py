@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 
 TOKEN = "8907138819:AAFaoYPga8s6KqwfSy6z2d0jACa1CA8LZl4"
 FIREBASE_URL = "https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app"
-WEBAPP_URL = "https://telegram-game-bot-ten.vercel.app/" # မင်းရဲ့ WebApp URL ထည့်ပါ
+WEBAPP_URL = "https://nexus-duos-bot.vercel.app"
 
 def generate_room_code():
     return ''.join(random.choices(string.digits, k=5))
@@ -125,4 +125,3 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(handle_callback))
     print("Bot is running...")
     app.run_polling()
-    
