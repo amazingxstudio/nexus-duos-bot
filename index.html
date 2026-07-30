@@ -2,2187 +2,526 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Game Hub - Telegram Mini App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nexus Duos Game Hub</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --bg: #1a1a2e;
-            --surface: #16213e;
-            --surface2: #0f3460;
-            --text: #e0e0e0;
-            --text-secondary: #a0a0b8;
-            --accent: #4cc9f0;
-            --accent2: #f72585;
-            --success: #2ecc71;
-            --danger: #e74c3c;
-            --warning: #f39c12;
-            --border: #2a2a4a;
+            --bg: #0b0f19;
+            --card: #151c2c;
+            --card-border: #232d42;
+            --primary: #3b82f6;
+            --accent: #ec4899;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
             --radius: 16px;
-            --radius-sm: 10px;
-            --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
-        .tg-light {
-            --bg: #f0f2f5;
-            --surface: #ffffff;
-            --surface2: #e8ecf1;
-            --text: #1a1a2e;
-            --text-secondary: #555;
-            --border: #dde1e6;
-            --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg); color: var(--text); padding: 16px; display: flex; justify-content: center; min-height: 100vh; }
+        #app { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
+        .hidden { display: none !important; }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        .card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 16px; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+        .btn { width: 100%; padding: 12px 16px; border: none; border-radius: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; background: var(--primary); transition: opacity 0.2s; }
+        .btn:active { opacity: 0.8; }
+        .btn-success { background: var(--success); }
+        .btn-secondary { background: #2a3447; color: var(--text); }
+        .btn-danger { background: #ef4444; }
 
-        body {
-            font-family: var(--font);
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding: 10px;
-            transition: background 0.3s, color 0.3s;
-        }
+        /* Profile Section */
+        .profile-card { display: flex; flex-direction: column; gap: 12px; }
+        .profile-header { display: flex; align-items: center; gap: 14px; }
+        .avatar { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--primary); object-fit: cover; }
+        .user-details { flex: 1; }
+        .username { font-weight: 700; font-size: 1.1rem; }
+        .user-id { font-size: 0.8rem; color: var(--text-muted); }
+        .nickname-box { display: flex; gap: 8px; margin-top: 6px; }
+        .input-field { background: #0b0f19; border: 1px solid var(--card-border); color: var(--text); padding: 6px 12px; border-radius: 8px; font-size: 0.85rem; width: 100%; }
 
-        #app {
-            width: 100%;
-            max-width: 480px;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            padding-bottom: 30px;
-        }
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); pt: 10px; margin-top: 8px; padding-top: 10px; font-size: 0.85rem; color: var(--text-muted); }
+        .switch { position: relative; width: 40px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #2a3447; transition: .3s; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(18px); }
 
-        .view {
-            display: none;
-            flex-direction: column;
-            gap: 14px;
-            animation: fadeSlideIn 0.3s ease;
-        }
-        .view.active {
-            display: flex;
-        }
+        /* Game Grid */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .game-card { background: #0b0f19; border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; text-align: center; cursor: pointer; }
+        .game-card i { font-size: 1.8rem; color: var(--primary); margin-bottom: 6px; }
 
-        @keyframes fadeSlideIn {
-            from {
-                opacity: 0;
-                transform: translateY(12px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
+        /* History List */
+        .history-item { background: #0b0f19; border: 1px solid var(--card-border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .score-diff { font-weight: bold; font-size: 0.85rem; }
+        .win { color: var(--success); }
+        .loss { color: #ef4444; }
 
-        .card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 18px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-        }
-        .card-header {
-            font-weight: 700;
-            font-size: 1.1rem;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--accent);
-        }
-        .card-header .icon {
-            font-size: 1.4rem;
-        }
+        /* Voting System */
+        .vote-card { background: #0b0f19; border: 1px solid var(--card-border); padding: 12px; border-radius: 10px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .vote-card.selected { border-color: var(--primary); background: rgba(59, 130, 246, 0.15); }
 
-        /* Profile Card */
-        .profile-card {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            flex-wrap: wrap;
-        }
-        .profile-avatar {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid var(--accent);
-            flex-shrink: 0;
-            background: var(--surface2);
-        }
-        .profile-info {
-            flex: 1;
-            min-width: 150px;
-        }
-        .profile-info .username {
-            font-weight: 700;
-            font-size: 1.1rem;
-        }
-        .profile-info .nickname-row {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            margin-top: 6px;
-            flex-wrap: wrap;
-        }
-        .profile-info input {
-            flex: 1;
-            min-width: 100px;
-            padding: 8px 12px;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border);
-            background: var(--surface2);
-            color: var(--text);
-            font-size: 0.9rem;
-            font-family: var(--font);
-        }
-        .profile-info input:focus {
-            outline: 2px solid var(--accent);
-            outline-offset: -1px;
-        }
-        .btn {
-            padding: 9px 16px;
-            border-radius: var(--radius-sm);
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.9rem;
-            font-family: var(--font);
-            transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            white-space: nowrap;
-        }
-        .btn:active {
-            transform: scale(0.96);
-            opacity: 0.85;
-        }
-        .btn-primary {
-            background: var(--accent);
-            color: #000;
-        }
-        .btn-secondary {
-            background: var(--surface2);
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-        .btn-danger {
-            background: var(--danger);
-            color: #fff;
-        }
-        .btn-success {
-            background: var(--success);
-            color: #fff;
-        }
-        .btn-accent2 {
-            background: var(--accent2);
-            color: #fff;
-        }
-        .btn-sm {
-            padding: 6px 12px;
-            font-size: 0.8rem;
-            border-radius: 8px;
-        }
-        .btn:disabled {
-            opacity: 0.5;
-            pointer-events: none;
-        }
-
-        /* Toggle Switch */
-        .toggle-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            margin-top: 8px;
-            flex-wrap: wrap;
-        }
-        .toggle-label {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-        }
-        .toggle-switch {
-            position: relative;
-            width: 52px;
-            height: 28px;
-            flex-shrink: 0;
-        }
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: var(--surface2);
-            border-radius: 28px;
-            transition: 0.3s;
-            border: 1px solid var(--border);
-        }
-        .toggle-slider::before {
-            content: '';
-            position: absolute;
-            height: 22px;
-            width: 22px;
-            left: 2px;
-            bottom: 2px;
-            background: #fff;
-            border-radius: 50%;
-            transition: 0.3s;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        .toggle-switch input:checked+.toggle-slider {
-            background: var(--accent);
-        }
-        .toggle-switch input:checked+.toggle-slider::before {
-            transform: translateX(24px);
-        }
-
-        /* Practice Mode */
-        .practice-games {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .practice-game-btn {
-            flex: 1;
-            min-width: 130px;
-            padding: 20px 16px;
-            border-radius: var(--radius);
-            background: var(--surface2);
-            border: 2px solid transparent;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.25s;
-            font-family: var(--font);
-            color: var(--text);
-            font-weight: 600;
-            font-size: 1rem;
-        }
-        .practice-game-btn:hover {
-            border-color: var(--accent);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
-        }
-        .practice-game-btn .game-emoji {
-            font-size: 2.8rem;
-            display: block;
-            margin-bottom: 8px;
-        }
-
-        /* History */
-        .history-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            max-height: 350px;
-            overflow-y: auto;
-        }
-        .history-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 14px;
-            border-radius: var(--radius-sm);
-            background: var(--surface2);
-            gap: 10px;
-            cursor: pointer;
-            transition: all 0.2s;
-            flex-wrap: wrap;
-        }
-        .history-item:hover {
-            background: var(--border);
-        }
-        .history-item .opponent {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 600;
-            min-width: 100px;
-        }
-        .history-item .opponent-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            object-fit: cover;
-            background: var(--surface);
-        }
-        .history-item .match-info {
-            text-align: right;
-            font-size: 0.85rem;
-        }
-        .score-positive {
-            color: var(--success);
-            font-weight: 700;
-        }
-        .score-negative {
-            color: var(--danger);
-            font-weight: 700;
-        }
-        .score-neutral {
-            color: var(--text-secondary);
-        }
-        .history-item .game-type-badge {
-            font-size: 0.7rem;
-            padding: 3px 8px;
-            border-radius: 20px;
-            background: var(--accent);
-            color: #000;
-            font-weight: 600;
-        }
-        .empty-state {
-            text-align: center;
-            color: var(--text-secondary);
-            padding: 20px;
-            font-size: 0.9rem;
-        }
-
-        /* Room / Connected View */
-        .room-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .room-id-badge {
-            font-family: monospace;
-            background: var(--surface2);
-            padding: 8px 14px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            letter-spacing: 1px;
-            cursor: pointer;
-            border: 1px dashed var(--accent);
-        }
-        .player-status-row {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: center;
-        }
-        .player-chip {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 14px;
-            border-radius: 20px;
-            background: var(--surface2);
-            font-weight: 600;
-            font-size: 0.9rem;
-        }
-        .player-chip.you {
-            border: 2px solid var(--accent);
-        }
-        .player-chip .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--success);
-        }
-        .player-chip .dot.waiting {
-            background: var(--warning);
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0%,
-            100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.35;
-            }
-        }
-        .vs-divider {
-            font-weight: 900;
-            font-size: 1.3rem;
-            color: var(--accent2);
-        }
-
-        /* Voting */
-        .voting-game-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .voting-game-option {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 14px;
-            border-radius: var(--radius-sm);
-            background: var(--surface2);
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.2s;
-            user-select: none;
-        }
-        .voting-game-option.selected {
-            border-color: var(--accent);
-            background: rgba(76, 201, 240, 0.1);
-        }
-        .voting-game-option .checkbox-custom {
-            width: 22px;
-            height: 22px;
-            border-radius: 6px;
-            border: 2px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            transition: all 0.2s;
-        }
-        .voting-game-option.selected .checkbox-custom {
-            background: var(--accent);
-            border-color: var(--accent);
-        }
-        .voting-game-option.selected .checkbox-custom::after {
-            content: '✓';
-            color: #000;
-            font-weight: 900;
-            font-size: 0.8rem;
-        }
-        .selection-count {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-        }
-
-        /* Game View */
-        .game-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-        }
-        .game-board-ttt {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            width: 100%;
-            max-width: 300px;
-            aspect-ratio: 1;
-        }
-        .ttt-cell {
-            background: var(--surface2);
-            border-radius: var(--radius-sm);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.8rem;
-            font-weight: 900;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: 2px solid transparent;
-            aspect-ratio: 1;
-            user-select: none;
-            color: var(--text);
-        }
-        .ttt-cell:hover:not(.played) {
-            border-color: var(--accent);
-            background: rgba(76, 201, 240, 0.08);
-        }
-        .ttt-cell.played {
-            cursor: default;
-        }
-        .ttt-cell.winning {
-            background: rgba(46, 204, 113, 0.25) !important;
-            border-color: var(--success) !important;
-            animation: winPulse 0.6s ease-in-out;
-        }
-        @keyframes winPulse {
-            0%,
-            100% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.06);
-            }
-        }
-
-        .rps-choices {
-            display: flex;
-            gap: 14px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .rps-btn {
-            width: 90px;
-            height: 90px;
-            border-radius: 50%;
-            font-size: 3rem;
-            border: 3px solid var(--border);
-            background: var(--surface2);
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .rps-btn:hover {
-            border-color: var(--accent);
-            transform: scale(1.08);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-        }
-        .rps-btn:active {
-            transform: scale(0.94);
-        }
-
-        .game-result-banner {
-            text-align: center;
-            font-weight: 700;
-            font-size: 1.3rem;
-            padding: 14px;
-            border-radius: var(--radius);
-            animation: fadeSlideIn 0.4s ease;
-        }
-        .result-win {
-            background: rgba(46, 204, 113, 0.2);
-            color: var(--success);
-        }
-        .result-lose {
-            background: rgba(231, 76, 60, 0.2);
-            color: var(--danger);
-        }
-        .result-draw {
-            background: rgba(243, 156, 18, 0.2);
-            color: var(--warning);
-        }
+        /* Game Boards */
+        .ttt-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 280px; margin: 16px auto; }
+        .ttt-cell { aspect-ratio: 1; background: #0b0f19; border: 2px solid var(--card-border); border-radius: 12px; font-size: 2rem; font-weight: 800; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--primary); }
+        .rps-options { display: flex; justify-content: center; gap: 16px; margin: 20px 0; }
+        .rps-btn { width: 70px; height: 70px; border-radius: 50%; border: 2px solid var(--primary); background: #0b0f19; font-size: 1.8rem; cursor: pointer; }
 
         /* Modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 100;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .modal-overlay.active {
-            display: flex;
-        }
-        .modal-content {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 20px;
-            width: 100%;
-            max-width: 420px;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-            animation: fadeSlideIn 0.3s ease;
-        }
-        .modal-close {
-            float: right;
-            background: none;
-            border: none;
-            color: var(--text);
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 6px;
-        }
-        .modal-close:hover {
-            background: var(--surface2);
-        }
-
-        /* Toast */
-        .toast {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #333;
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            z-index: 200;
-            pointer-events: none;
-            animation: toastIn 0.3s ease, toastOut 0.3s ease 2.2s forwards;
-        }
-        @keyframes toastIn {
-            from {
-                opacity: 0;
-                transform: translateX(-50%) translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(-50%) translateY(0);
-            }
-        }
-        @keyframes toastOut {
-            from {
-                opacity: 1;
-            }
-            to {
-                opacity: 0;
-                transform: translateX(-50%) translateY(-10px);
-            }
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 4px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 4px;
-        }
-
-        @media (max-width: 400px) {
-            .practice-game-btn {
-                padding: 14px 10px;
-                font-size: 0.85rem;
-            }
-            .practice-game-btn .game-emoji {
-                font-size: 2.2rem;
-            }
-            .rps-btn {
-                width: 70px;
-                height: 70px;
-                font-size: 2.4rem;
-            }
-            .ttt-cell {
-                font-size: 2rem;
-            }
-        }
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 100; }
     </style>
 </head>
 <body>
-    <div id="app">
-        <!-- Unconnected View (Single Player) -->
-        <div id="view-unconnected" class="view active">
-            <!-- Profile Card -->
-            <div class="card" id="profile-card">
-                <div class="profile-card">
-                    <img id="profile-avatar" class="profile-avatar" src="" alt="Avatar">
-                    <div class="profile-info">
-                        <div class="username" id="profile-username">@username</div>
-                        <div class="nickname-row">
-                            <input type="text" id="nickname-input" placeholder="Set nickname..." maxlength="30">
-                            <button class="btn btn-primary btn-sm" id="btn-save-nickname">💾 Save</button>
-                        </div>
+
+<div id="app">
+
+    <div id="view-unconnected" class="view">
+        <div class="card profile-card">
+            <div class="profile-header">
+                <img id="my-avatar" class="avatar" src="https://via.placeholder.com/64" alt="Avatar">
+                <div class="user-details">
+                    <div id="my-username" class="username">Loading...</div>
+                    <div id="my-id" class="user-id">ID: ------</div>
+                    <div class="nickname-box">
+                        <input type="text" id="my-nickname" class="input-field" placeholder="Set Nickname">
+                        <button onclick="saveNickname()" class="btn" style="width: auto; padding: 6px 12px;"><i class="fa-solid fa-save"></i></button>
                     </div>
                 </div>
-                <div class="toggle-row">
-                    <span class="toggle-label">👁️ Show History to All</span>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="toggle-history-privacy">
-                        <span class="toggle-slider"></span>
-                    </label>
+            </div>
+            <div class="toggle-row">
+                <span><i class="fa-solid fa-eye"></i> Show History to All</span>
+                <label class="switch">
+                    <input type="checkbox" id="privacy-toggle" onchange="savePrivacy()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="font-weight: 700; margin-bottom: 10px;"><i class="fa-solid fa-robot"></i> Practice Mode (No Score)</div>
+            <div class="grid-2">
+                <div class="game-card" onclick="startPractice('tictactoe')">
+                    <i class="fa-solid fa-xmark-large"></i>
+                    <div>Tic-Tac-Toe</div>
                 </div>
-            </div>
-
-            <!-- Practice Mode -->
-            <div class="card">
-                <div class="card-header"><span class="icon">🎮</span> Practice Mode (vs Bot)</div>
-                <div class="practice-games">
-                    <button class="practice-game-btn" data-game="tictactoe">
-                        <span class="game-emoji">❌⭕</span> Tic-Tac-Toe
-                    </button>
-                    <button class="practice-game-btn" data-game="rps">
-                        <span class="game-emoji">🪨📄✂️</span> Rock-Paper-Scissors
-                    </button>
-                </div>
-                <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:8px;">⚠️ Scores are NOT affected in practice mode.</p>
-            </div>
-
-            <!-- Multiplayer -->
-            <div class="card">
-                <div class="card-header"><span class="icon">🌐</span> Multiplayer</div>
-                <button class="btn btn-accent2" id="btn-create-room" style="width:100%;justify-content:center;">🔗 Create Room & Invite Friend</button>
-                <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:8px;text-align:center;">
-                    Or join via a shared link (?room=...)
-                </p>
-            </div>
-
-            <!-- History -->
-            <div class="card">
-                <div class="card-header"><span class="icon">📋</span> Match History</div>
-                <div id="history-list" class="history-list">
-                    <div class="empty-state">No matches yet. Play some games! 🎯</div>
+                <div class="game-card" onclick="startPractice('rps')">
+                    <i class="fa-solid fa-hand-back-fist"></i>
+                    <div>Rock-Paper-Scissors</div>
                 </div>
             </div>
         </div>
 
-        <!-- Connected View (Multiplayer Room) -->
-        <div id="view-connected" class="view">
-            <div class="card">
-                <div class="room-header">
-                    <span style="font-weight:700;">🏠 Room</span>
-                    <span class="room-id-badge" id="room-id-display" title="Tap to copy link">---</span>
-                    <button class="btn btn-danger btn-sm" id="btn-leave-room">🚪 Leave</button>
-                </div>
-                <div class="player-status-row" id="player-status-row">
-                    <div class="player-chip you"><span id="p1-name">You</span><span class="dot"></span></div>
-                    <span class="vs-divider">VS</span>
-                    <div class="player-chip" id="p2-chip"><span id="p2-name">Waiting...</span><span class="dot waiting"></span></div>
-                </div>
-                <div id="room-status-msg" style="text-align:center;margin-top:8px;font-size:0.85rem;color:var(--text-secondary);">
-                    Share the link to invite a friend!
-                </div>
-            </div>
-
-            <!-- Voting UI -->
-            <div class="card" id="voting-card" style="display:none;">
-                <div class="card-header"><span class="icon">🗳️</span> Vote for Games <span class="selection-count" id="vote-count">(0/3)</span></div>
-                <div class="voting-game-list" id="voting-game-list">
-                    <div class="voting-game-option" data-game="tictactoe">
-                        <div class="checkbox-custom"></div>❌⭕ Tic-Tac-Toe
-                    </div>
-                    <div class="voting-game-option" data-game="rps">
-                        <div class="checkbox-custom"></div>🪨📄✂️ Rock-Paper-Scissors
-                    </div>
-                    <div class="voting-game-option" data-game="chess">
-                        <div class="checkbox-custom"></div>♟️ Chess (Coming Soon)
-                    </div>
-                    <div class="voting-game-option" data-game="connect4">
-                        <div class="checkbox-custom"></div>🔴🟡 Connect 4 (Coming Soon)
-                    </div>
-                    <div class="voting-game-option" data-game="memory">
-                        <div class="checkbox-custom"></div>🧠 Memory Match (Coming Soon)
-                    </div>
-                </div>
-                <button class="btn btn-primary" id="btn-submit-vote" style="width:100%;justify-content:center;margin-top:10px;" disabled>
-                    📩 Submit Votes
-                </button>
-                <p id="vote-status" style="text-align:center;font-size:0.8rem;color:var(--text-secondary);margin-top:6px;"></p>
-            </div>
-
-            <!-- Direct Game Button -->
-            <div class="card" id="direct-game-card" style="display:none;">
-                <button class="btn btn-success" id="btn-start-direct-game" style="width:100%;justify-content:center;font-size:1.1rem;">
-                    🎯 Start Direct Game
-                </button>
-            </div>
-
-            <!-- Post-vote Game Start -->
-            <div class="card" id="selected-game-card" style="display:none;">
-                <div style="text-align:center;">
-                    <div style="font-size:2rem;" id="selected-game-emoji">🎮</div>
-                    <div style="font-weight:700;margin:6px 0;" id="selected-game-name">Game</div>
-                    <button class="btn btn-success" id="btn-start-selected-game" style="width:100%;justify-content:center;">
-                        ▶️ Start Game
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Game View -->
-        <div id="view-game" class="view">
-            <div class="card">
-                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                    <button class="btn btn-secondary btn-sm" id="btn-game-back">⬅️ Back</button>
-                    <span style="font-weight:700;" id="game-title">Game</span>
-                    <span style="font-size:0.8rem;color:var(--text-secondary);" id="game-mode-badge">Practice</span>
-                </div>
-            </div>
-            <div class="card" id="game-play-area">
-                <div class="game-container" id="game-container">
-                    <!-- Dynamically filled -->
-                </div>
-            </div>
-            <div id="game-result-area" style="display:none;"></div>
+        <div class="card">
+            <div style="font-weight: 700; margin-bottom: 10px;"><i class="fa-solid fa-clock-rotate-left"></i> Match History</div>
+            <div id="history-container">Loading matches...</div>
         </div>
     </div>
 
-    <!-- Profile Modal -->
-    <div class="modal-overlay" id="modal-profile-overlay">
-        <div class="modal-content" id="modal-profile-content">
-            <button class="modal-close" id="modal-profile-close">✕</button>
-            <div id="modal-profile-body"></div>
+    <div id="view-connected" class="view hidden">
+        <div class="card" style="text-align: center;">
+            <h2 id="room-title" style="color: var(--primary); margin-bottom: 6px;">Room: ------</h2>
+            <p id="room-status" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px;">Waiting for opponent...</p>
+
+            <div id="voting-box" class="hidden">
+                <div style="font-weight: 700; margin-bottom: 10px;">Select 3 Games (<span id="vote-count">0</span>/3)</div>
+                <div id="voting-candidates">
+                    <div class="vote-card" onclick="toggleVote('tictactoe')"><span>❌⭕ Tic-Tac-Toe</span></div>
+                    <div class="vote-card" onclick="toggleVote('rps')"><span>✊✋✌️ Rock-Paper-Scissors</span></div>
+                    <div class="vote-card" onclick="toggleVote('connect4')"><span>🔴🟡 Connect Four</span></div>
+                    <div class="vote-card" onclick="toggleVote('memory')"><span>🧠 Memory Match</span></div>
+                    <div class="vote-card" onclick="toggleVote('checkers')"><span>🏁 Checkers</span></div>
+                </div>
+                <button id="btn-submit-vote" class="btn btn-success" style="margin-top: 10px;" disabled onclick="submitVotes()">Submit Votes</button>
+            </div>
+
+            <div id="direct-box" class="hidden">
+                <button onclick="startDirectGame()" class="btn btn-success">Start Game</button>
+            </div>
+
+            <button onclick="leaveRoom()" class="btn btn-secondary" style="margin-top: 12px;">Leave Room</button>
         </div>
     </div>
 
-    <!-- Toast container -->
-    <div id="toast-container"></div>
+    <div id="view-game" class="view hidden">
+        <div class="card" style="text-align: center;">
+            <h3 id="game-title">Game Arena</h3>
+            <div id="game-status-text" style="color: var(--warning); margin: 10px 0;">Your Turn</div>
 
-    <script>
-        (function() {
-            // ─────────────────────────────────────
-            // CONFIGURATION - Replace with your Firebase details
-            // ─────────────────────────────────────
-            const FIREBASE_DB_URL = 'https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app';
-            // For production, use Firebase Auth tokens. For testing, you may use ?auth=YOUR_DB_SECRET
-            const FIREBASE_AUTH_PARAM = ''; // e.g., '?auth=your-database-secret-token'
+            <div id="arena-ttt" class="ttt-board hidden">
+                <div class="ttt-cell" onclick="handleTTTClick(0)"></div>
+                <div class="ttt-cell" onclick="handleTTTClick(1)"></div>
+                <div class="ttt-cell" onclick="handleTTTClick(2)"></div>
+                <div class="ttt-cell" onclick="handleTTTClick(3)"></div>
+                <div class="ttt-cell" onclick="handleTTTClick(4)"></div>
+                <div class="ttt-cell" onclick="handleTTTClick(5)"></div>
+                <div class="ttt-cell" onclick="handleTTTClick(6)"></div>
+                <div class="ttt-cell" onclick="handleTTTClick(7)"></div>
+                <div class="ttt-cell" onclick="handleTTTClick(8)"></div>
+            </div>
 
-            // ─────────────────────────────────────
-            // TELEGRAM WEBAPP INITIALIZATION
-            // ─────────────────────────────────────
-            const tg = window.Telegram?.WebApp;
-            let tgUser = null;
-            let tgThemeParams = {};
+            <div id="arena-rps" class="rps-options hidden">
+                <button class="rps-btn" onclick="handleRPSClick('rock')">✊</button>
+                <button class="rps-btn" onclick="handleRPSClick('paper')">✋</button>
+                <button class="rps-btn" onclick="handleRPSClick('scissors')">✌️</button>
+            </div>
 
-            if (tg) {
-                tg.ready();
-                tg.expand();
-                tgUser = tg.initDataUnsafe?.user || null;
-                tgThemeParams = tg.themeParams || {};
-                // Apply Telegram theme
-                if (tgThemeParams.bg_color && tgThemeParams.text_color) {
-                    const isLight = tgThemeParams.bg_color &&
-                        (parseInt(tgThemeParams.bg_color.replace('#', ''), 16) > 0x888888);
-                    if (isLight) {
-                        document.body.classList.add('tg-light');
-                    }
-                }
+            <button onclick="exitArena()" class="btn btn-secondary" style="margin-top: 16px;"><i class="fa-solid fa-arrow-left"></i> Back</button>
+        </div>
+    </div>
+
+</div>
+
+<div id="profile-modal" class="modal hidden">
+    <div class="card" style="width: 100%; max-width: 360px;">
+        <h3 id="modal-username">User Profile</h3>
+        <p id="modal-score" style="color: var(--primary); margin: 6px 0;">Score: 0</p>
+        <div style="font-weight: 700; margin-top: 10px;">History</div>
+        <div id="modal-history-list" style="max-height: 200px; overflow-y: auto; margin-top: 8px;"></div>
+        <button onclick="closeModal()" class="btn btn-secondary" style="margin-top: 14px;">Close</button>
+    </div>
+</div>
+
+<script>
+    const FIREBASE_DB = 'https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app';
+    const tg = window.Telegram?.WebApp;
+    if (tg) { tg.ready(); tg.expand(); }
+
+    const tgUser = tg?.initDataUnsafe?.user || { id: '999999', username: 'GuestUser', first_name: 'Guest' };
+    const USER_ID = String(tgUser.id);
+    const USER_NAME = tgUser.username || tgUser.first_name;
+
+    let state = {
+        currentView: 'unconnected',
+        roomId: null,
+        isPractice: false,
+        gameType: null,
+        selectedVotes: [],
+        pollingTimer: null,
+        tttBoard: Array(9).fill(''),
+        myTurn: true
+    };
+
+    async function fbCall(method, path, data = null) {
+        const options = { method, headers: { 'Content-Type': 'application/json' } };
+        if (data) options.body = JSON.stringify(data);
+        const res = await fetch(`${FIREBASE_DB}/${path}.json`, options);
+        return res.json();
+    }
+
+    function switchView(viewName) {
+        document.querySelectorAll('.view').forEach(el => el.classList.add('hidden'));
+        document.getElementById(`view-${viewName}`).classList.remove('hidden');
+        state.currentView = viewName;
+
+        if (tg && tg.BackButton) {
+            if (viewName === 'unconnected') tg.BackButton.hide();
+            else {
+                tg.BackButton.show();
+                tg.BackButton.onClick(() => exitArena());
             }
+        }
+    }
 
-            // Fallback for non-Telegram testing
-            if (!tgUser) {
-                tgUser = {
-                    id: 123456789,
-                    username: 'test_user',
-                    first_name: 'Test',
-                    photo_url: '',
-                };
-                console.warn('⚠️ Not running inside Telegram. Using mock user for testing.');
-            }
+    async function init() {
+        document.getElementById('my-username').innerText = `@${USER_NAME}`;
+        document.getElementById('my-id').innerText = `ID: ${USER_ID}`;
+        if (tgUser.photo_url) document.getElementById('my-avatar').src = tgUser.photo_url;
 
-            const USER_ID = String(tgUser.id);
-            const USER_USERNAME = tgUser.username || tgUser.first_name || 'unknown';
-            const USER_PHOTO_URL = tgUser.photo_url || '';
+        let dbUser = await fbCall('GET', `users/${USER_ID}`);
+        if (!dbUser) {
+            dbUser = { id: USER_ID, username: USER_NAME, nickname: USER_NAME, score: 0, showHistory: false };
+            await fbCall('PUT', `users/${USER_ID}`, dbUser);
+        }
+        document.getElementById('my-nickname').value = dbUser.nickname || USER_NAME;
+        document.getElementById('privacy-toggle').checked = !!dbUser.showHistory;
 
-            // ─────────────────────────────────────
-            // APP STATE
-            // ─────────────────────────────────────
-            const state = {
-                currentView: 'unconnected', // 'unconnected' | 'connected' | 'game'
-                nickname: USER_USERNAME,
-                showHistoryToAll: false,
-                score: 0,
-                gamesPlayed: 0,
-                gamesWon: 0,
-                // Room
-                roomId: null,
-                roomData: null,
-                isPlayer1: true,
-                opponentId: null,
-                opponentData: null,
-                // Voting
-                myVotes: [],
-                opponentVotes: [],
-                selectedGame: null,
-                // Game
-                gameMode: 'practice', // 'practice' | 'multiplayer'
-                gameType: null, // 'tictactoe' | 'rps'
-                gameState: null,
-                // Polling
-                pollingInterval: null,
-            };
+        await loadHistory();
 
-            // ─────────────────────────────────────
-            // DOM REFERENCES
-            // ─────────────────────────────────────
-            const $ = (sel) => document.querySelector(sel);
-            const $$ = (sel) => document.querySelectorAll(sel);
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get('room');
+        const gameParam = urlParams.get('game');
 
-            const viewUnconnected = $('#view-unconnected');
-            const viewConnected = $('#view-connected');
-            const viewGame = $('#view-game');
+        if (roomParam) {
+            joinRoomProcess(roomParam, gameParam);
+        } else {
+            switchView('unconnected');
+        }
+    }
 
-            // ─────────────────────────────────────
-            // FIREBASE REST API HELPERS
-            // ─────────────────────────────────────
-            async function fbGet(path) {
-                const url = `${FIREBASE_DB_URL}${path}.json${FIREBASE_AUTH_PARAM}`;
-                const res = await fetch(url);
-                if (!res.ok) throw new Error(`Firebase GET ${path} failed: ${res.status}`);
-                return res.json();
-            }
+    async function saveNickname() {
+        const val = document.getElementById('my-nickname').value.trim();
+        await fbCall('PATCH', `users/${USER_ID}`, { nickname: val });
+        alert('✅ Nickname saved');
+    }
 
-            async function fbPut(path, data) {
-                const url = `${FIREBASE_DB_URL}${path}.json${FIREBASE_AUTH_PARAM}`;
-                const res = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
-                });
-                if (!res.ok) throw new Error(`Firebase PUT ${path} failed: ${res.status}`);
-                return res.json();
-            }
+    async function savePrivacy() {
+        const val = document.getElementById('privacy-toggle').checked;
+        await fbCall('PATCH', `users/${USER_ID}`, { showHistory: val });
+    }
 
-            async function fbPatch(path, data) {
-                const url = `${FIREBASE_DB_URL}${path}.json${FIREBASE_AUTH_PARAM}`;
-                const res = await fetch(url, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
-                });
-                if (!res.ok) throw new Error(`Firebase PATCH ${path} failed: ${res.status}`);
-                return res.json();
-            }
+    async function loadHistory() {
+        const matches = await fbCall('GET', 'matches');
+        const container = document.getElementById('history-container');
+        if (!matches) { container.innerHTML = '<p style="color:var(--text-muted)">No matches played yet.</p>'; return; }
 
-            async function fbPost(path, data) {
-                const url = `${FIREBASE_DB_URL}${path}.json${FIREBASE_AUTH_PARAM}`;
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
-                });
-                if (!res.ok) throw new Error(`Firebase POST ${path} failed: ${res.status}`);
-                return res.json();
-            }
+        let html = '';
+        Object.values(matches).reverse().forEach(m => {
+            if (m.p1 === USER_ID || m.p2 === USER_ID) {
+                const isP1 = m.p1 === USER_ID;
+                const oppId = isP1 ? m.p2 : m.p1;
+                const oppName = isP1 ? m.p2Name : m.p1Name;
+                const myScore = isP1 ? m.p1Score : m.p2Score;
+                const oppScore = isP1 ? m.p2Score : m.p1Score;
+                const diff = myScore - oppScore;
+                const diffText = diff > 0 ? `+${diff} pts` : `${diff} pts`;
 
-            async function fbDelete(path) {
-                const url = `${FIREBASE_DB_URL}${path}.json${FIREBASE_AUTH_PARAM}`;
-                const res = await fetch(url, { method: 'DELETE' });
-                if (!res.ok) throw new Error(`Firebase DELETE ${path} failed: ${res.status}`);
-                return res.json();
-            }
-
-            // ─────────────────────────────────────
-            // TOAST
-            // ─────────────────────────────────────
-            function showToast(msg) {
-                const container = $('#toast-container');
-                const toast = document.createElement('div');
-                toast.className = 'toast';
-                toast.textContent = msg;
-                container.appendChild(toast);
-                setTimeout(() => toast.remove(), 2600);
-            }
-
-            // ─────────────────────────────────────
-            // VIEW SWITCHING
-            // ─────────────────────────────────────
-            function switchView(viewName) {
-                state.currentView = viewName;
-                [viewUnconnected, viewConnected, viewGame].forEach(v => v.classList.remove('active'));
-                if (viewName === 'unconnected') viewUnconnected.classList.add('active');
-                if (viewName === 'connected') viewConnected.classList.add('active');
-                if (viewName === 'game') viewGame.classList.add('active');
-                if (viewName !== 'connected') stopPolling();
-                if (viewName === 'unconnected') {
-                    loadUserData();
-                    loadHistory();
-                }
-                if (viewName === 'connected') startPolling();
-            }
-
-            // ─────────────────────────────────────
-            // POLLING FOR ROOM UPDATES
-            // ─────────────────────────────────────
-            function startPolling() {
-                stopPolling();
-                if (!state.roomId) return;
-                state.pollingInterval = setInterval(pollRoom, 2000);
-                pollRoom(); // immediate first poll
-            }
-
-            function stopPolling() {
-                if (state.pollingInterval) {
-                    clearInterval(state.pollingInterval);
-                    state.pollingInterval = null;
-                }
-            }
-
-            async function pollRoom() {
-                if (!state.roomId) return;
-                try {
-                    const roomData = await fbGet(`/rooms/${state.roomId}`);
-                    if (!roomData) {
-                        showToast('Room has been deleted.');
-                        leaveRoom();
-                        return;
-                    }
-                    state.roomData = roomData;
-                    updateConnectedUI();
-                    // Check for game state updates if in game
-                    if (state.currentView === 'game' && state.gameMode === 'multiplayer' && roomData.game) {
-                        handleMultiplayerGameSync(roomData.game);
-                    }
-                    // Check for selected game
-                    if (roomData.selectedGame && state.currentView === 'connected') {
-                        state.selectedGame = roomData.selectedGame;
-                        showSelectedGameUI();
-                    }
-                } catch (err) {
-                    console.error('Poll error:', err);
-                }
-            }
-
-            // ─────────────────────────────────────
-            // USER DATA
-            // ─────────────────────────────────────
-            async function loadUserData() {
-                try {
-                    const data = await fbGet(`/users/${USER_ID}`);
-                    if (data) {
-                        state.nickname = data.nickname || USER_USERNAME;
-                        state.showHistoryToAll = data.showHistoryToAll || false;
-                        state.score = data.score || 0;
-                        state.gamesPlayed = data.gamesPlayed || 0;
-                        state.gamesWon = data.gamesWon || 0;
-                    } else {
-                        // Initialize user
-                        await fbPut(`/users/${USER_ID}`, {
-                            username: USER_USERNAME,
-                            nickname: USER_USERNAME,
-                            photoUrl: USER_PHOTO_URL,
-                            score: 0,
-                            showHistoryToAll: false,
-                            gamesPlayed: 0,
-                            gamesWon: 0,
-                            createdAt: Date.now(),
-                        });
-                    }
-                    updateProfileUI();
-                } catch (err) {
-                    console.error('Load user error:', err);
-                    updateProfileUI();
-                }
-            }
-
-            function updateProfileUI() {
-                $('#profile-avatar').src = USER_PHOTO_URL || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%234cc9f0" width="100" height="100"/><text x="50" y="65" text-anchor="middle" font-size="40" fill="%23000">' +
-                    (USER_USERNAME.charAt(0).toUpperCase()) + '</text></svg>';
-                $('#profile-username').textContent = '@' + USER_USERNAME;
-                $('#nickname-input').value = state.nickname;
-                $('#toggle-history-privacy').checked = state.showHistoryToAll;
-            }
-
-            async function saveNickname() {
-                const newNick = $('#nickname-input').value.trim();
-                if (!newNick || newNick.length < 2) {
-                    showToast('Nickname must be at least 2 characters.');
-                    return;
-                }
-                state.nickname = newNick;
-                try {
-                    await fbPatch(`/users/${USER_ID}`, { nickname: newNick });
-                    showToast('✅ Nickname saved!');
-                } catch (err) {
-                    showToast('❌ Failed to save nickname.');
-                }
-            }
-
-            async function savePrivacyToggle() {
-                state.showHistoryToAll = $('#toggle-history-privacy').checked;
-                try {
-                    await fbPatch(`/users/${USER_ID}`, { showHistoryToAll: state.showHistoryToAll });
-                    showToast(state.showHistoryToAll ? '🔓 History visible to all' : '🔒 History is private');
-                } catch (err) {
-                    showToast('❌ Failed to update privacy setting.');
-                }
-            }
-
-            // ─────────────────────────────────────
-            // HISTORY
-            // ─────────────────────────────────────
-            async function loadHistory() {
-                const container = $('#history-list');
-                try {
-                    const matches = await fbGet(`/users/${USER_ID}/history`);
-                    if (!matches) {
-                        container.innerHTML = '<div class="empty-state">No matches yet. Play some games! 🎯</div>';
-                        return;
-                    }
-                    const matchIds = Object.keys(matches);
-                    if (matchIds.length === 0) {
-                        container.innerHTML = '<div class="empty-state">No matches yet. Play some games! 🎯</div>';
-                        return;
-                    }
-                    // Get match details
-                    const matchPromises = matchIds.map(id => fbGet(`/matches/${id}`));
-                    const matchResults = await Promise.all(matchPromises);
-                    const validMatches = matchResults.filter(m => m !== null);
-                    // Sort by date descending
-                    validMatches.sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0));
-
-                    if (validMatches.length === 0) {
-                        container.innerHTML = '<div class="empty-state">No matches yet. Play some games! 🎯</div>';
-                        return;
-                    }
-
-                    container.innerHTML = validMatches.map(m => {
-                        const isPlayer1 = m.player1 === USER_ID;
-                        const opponentId = isPlayer1 ? m.player2 : m.player1;
-                        const myScoreChange = isPlayer1 ? m.player1ScoreChange : m.player2ScoreChange;
-                        const resultClass = myScoreChange > 0 ? 'score-positive' : myScoreChange < 0 ?
-                            'score-negative' : 'score-neutral';
-                        const resultSign = myScoreChange > 0 ? '+' : '';
-                        const gameEmoji = m.game === 'tictactoe' ? '❌⭕' : m.game === 'rps' ? '🪨📄✂️' : '🎮';
-                        const resultText = m.result === 'draw' ? 'Draw' :
-                            (isPlayer1 && m.result === 'player1_win') || (!isPlayer1 && m.result ===
-                                'player2_win') ? 'Won' : 'Lost';
-                        return `
-                            <div class="history-item" data-opponent-id="${opponentId}">
-                                <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:140px;">
-                                    <span style="font-size:1.4rem;">${gameEmoji}</span>
-                                    <span class="game-type-badge">${m.game || 'game'}</span>
-                                    <span style="font-weight:600;font-size:0.9rem;">vs</span>
-                                    <span style="cursor:pointer;text-decoration:underline;color:var(--accent);" class="opponent-link" data-opponent-id="${opponentId}">
-                                        ${m.opponentNickname || 'Player'}
-                                    </span>
-                                </div>
-                                <div class="match-info">
-                                    <span style="font-weight:600;">${resultText}</span>
-                                    <span class="${resultClass}" style="margin-left:6px;">${resultSign}${myScoreChange || 0} pts</span>
-                                    <div style="font-size:0.7rem;color:var(--text-secondary);">${new Date(m.playedAt || Date.now()).toLocaleDateString()}</div>
-                                </div>
-                            </div>`;
-                    }).join('');
-
-                    // Add click handlers for opponent links
-                    container.querySelectorAll('.opponent-link').forEach(link => {
-                        link.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const oppId = link.dataset.opponentId;
-                            openProfileModal(oppId);
-                        });
-                    });
-                    container.querySelectorAll('.history-item').forEach(item => {
-                        item.addEventListener('click', () => {
-                            const oppId = item.dataset.opponentId;
-                            openProfileModal(oppId);
-                        });
-                    });
-                } catch (err) {
-                    console.error('Load history error:', err);
-                    container.innerHTML =
-                        '<div class="empty-state">⚠️ Could not load history. Check Firebase connection.</div>';
-                }
-            }
-
-            // ─────────────────────────────────────
-            // PROFILE MODAL
-            // ─────────────────────────────────────
-            async function openProfileModal(opponentId) {
-                const overlay = $('#modal-profile-overlay');
-                const body = $('#modal-profile-body');
-                overlay.classList.add('active');
-                body.innerHTML = '<div style="text-align:center;padding:20px;">Loading profile...</div>';
-
-                try {
-                    const oppData = await fbGet(`/users/${opponentId}`);
-                    if (!oppData) {
-                        body.innerHTML = '<div style="text-align:center;padding:20px;">User not found.</div>';
-                        return;
-                    }
-                    const canSeeAll = oppData.showHistoryToAll === true;
-                    let matchHistoryHtml = '';
-
-                    if (canSeeAll) {
-                        // Show all matches for this opponent
-                        const oppHistory = await fbGet(`/users/${opponentId}/history`);
-                        if (oppHistory) {
-                            const matchIds = Object.keys(oppHistory);
-                            const matchProms = matchIds.map(id => fbGet(`/matches/${id}`));
-                            const allMatches = (await Promise.all(matchProms)).filter(m => m !== null);
-                            allMatches.sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0));
-                            matchHistoryHtml = allMatches.slice(0, 20).map(m => {
-                                const isOpp = m.player1 === opponentId;
-                                const sc = isOpp ? m.player1ScoreChange : m.player2ScoreChange;
-                                return `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
-                                    ${m.game || 'game'} — ${m.result || '?'} (${sc > 0 ? '+' : ''}${sc || 0} pts)
-                                    <span style="color:var(--text-secondary);font-size:0.7rem;">${new Date(m.playedAt || 0).toLocaleDateString()}</span>
-                                </div>`;
-                            }).join('') || '<div class="empty-state">No matches</div>';
-                        }
-                    } else {
-                        // Only show mutual matches
-                        const myHistory = await fbGet(`/users/${USER_ID}/history`);
-                        const oppHistory = await fbGet(`/users/${opponentId}/history`);
-                        if (myHistory && oppHistory) {
-                            const myMatchIds = new Set(Object.keys(myHistory));
-                            const mutualIds = Object.keys(oppHistory).filter(id => myMatchIds.has(id));
-                            const matchProms = mutualIds.map(id => fbGet(`/matches/${id}`));
-                            const mutualMatches = (await Promise.all(matchProms)).filter(m => m !== null);
-                            mutualMatches.sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0));
-                            matchHistoryHtml = mutualMatches.slice(0, 20).map(m => {
-                                return `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
-                                    ${m.game || 'game'} — ${m.result || '?'}
-                                    <span style="color:var(--text-secondary);font-size:0.7rem;">${new Date(m.playedAt || 0).toLocaleDateString()}</span>
-                                </div>`;
-                            }).join('') || '<div class="empty-state">No mutual matches found.</div>';
-                        } else {
-                            matchHistoryHtml = '<div class="empty-state">No mutual matches found.</div>';
-                        }
-                    }
-
-                    body.innerHTML = `
-                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-                            <img src="${oppData.photoUrl || ''}" style="width:50px;height:50px;border-radius:50%;object-fit:cover;background:var(--surface2);" onerror="this.style.display='none'">
-                            <div>
-                                <div style="font-weight:700;font-size:1.1rem;">${oppData.nickname || oppData.username || 'Player'}</div>
-                                <div style="font-size:0.85rem;color:var(--text-secondary);">@${oppData.username || 'unknown'}</div>
-                                <div style="font-size:0.85rem;">🏆 Score: ${oppData.score || 0}</div>
-                                <div style="font-size:0.8rem;">Games: ${oppData.gamesPlayed || 0} | Wins: ${oppData.gamesWon || 0}</div>
-                            </div>
+                html += `
+                    <div class="history-item" onclick="inspectUser('${oppId}')">
+                        <div>
+                            <div style="font-weight:bold;">${m.game.toUpperCase()} vs ${oppName}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">${new Date(m.timestamp).toLocaleDateString()}</div>
                         </div>
-                        <div style="font-weight:600;margin-bottom:6px;">📋 ${canSeeAll ? 'Full Match History' : 'Mutual Match History'} ${canSeeAll ? '(Public)' : '(Private)'}</div>
-                        <div style="max-height:250px;overflow-y:auto;">${matchHistoryHtml}</div>
-                    `;
-                } catch (err) {
-                    body.innerHTML =
-                        '<div style="text-align:center;padding:20px;">⚠️ Could not load profile.</div>';
-                }
-            }
-
-            function closeProfileModal() {
-                $('#modal-profile-overlay').classList.remove('active');
-            }
-
-            // ─────────────────────────────────────
-            // ROOM MANAGEMENT
-            // ─────────────────────────────────────
-            async function createRoom() {
-                const roomId = 'room_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 6);
-                const roomData = {
-                    createdBy: USER_ID,
-                    player1: USER_ID,
-                    player1Nickname: state.nickname,
-                    player1PhotoUrl: USER_PHOTO_URL,
-                    player2: null,
-                    player2Nickname: null,
-                    player2PhotoUrl: null,
-                    status: 'waiting',
-                    specificGame: null,
-                    selectedGame: null,
-                    votes: {},
-                    game: null,
-                    createdAt: Date.now(),
-                };
-                try {
-                    await fbPut(`/rooms/${roomId}`, roomData);
-                    state.roomId = roomId;
-                    state.isPlayer1 = true;
-                    state.roomData = roomData;
-                    state.opponentId = null;
-                    state.myVotes = [];
-                    state.selectedGame = null;
-                    updateURL(roomId);
-                    switchView('connected');
-                    showToast('✅ Room created! Share the link.');
-                    copyRoomLink();
-                } catch (err) {
-                    showToast('❌ Failed to create room.');
-                }
-            }
-
-            async function joinRoom(roomId) {
-                try {
-                    const roomData = await fbGet(`/rooms/${roomId}`);
-                    if (!roomData) {
-                        showToast('❌ Room not found.');
-                        return;
-                    }
-                    if (roomData.player1 === USER_ID) {
-                        // Rejoining own room
-                        state.roomId = roomId;
-                        state.isPlayer1 = true;
-                        state.roomData = roomData;
-                        state.opponentId = roomData.player2;
-                        state.myVotes = roomData.votes?.[USER_ID] || [];
-                        state.selectedGame = roomData.selectedGame || null;
-                        updateURL(roomId);
-                        switchView('connected');
-                        return;
-                    }
-                    if (roomData.player2 && roomData.player2 !== USER_ID) {
-                        showToast('❌ Room is full.');
-                        return;
-                    }
-                    // Join as player 2
-                    if (!roomData.player2) {
-                        await fbPatch(`/rooms/${roomId}`, {
-                            player2: USER_ID,
-                            player2Nickname: state.nickname,
-                            player2PhotoUrl: USER_PHOTO_URL,
-                            status: roomData.specificGame ? 'playing' : 'voting',
-                        });
-                        roomData.player2 = USER_ID;
-                        roomData.player2Nickname = state.nickname;
-                        roomData.player2PhotoUrl = USER_PHOTO_URL;
-                        roomData.status = roomData.specificGame ? 'playing' : 'voting';
-                    }
-                    state.roomId = roomId;
-                    state.isPlayer1 = false;
-                    state.roomData = roomData;
-                    state.opponentId = roomData.player1;
-                    state.myVotes = roomData.votes?.[USER_ID] || [];
-                    state.selectedGame = roomData.selectedGame || null;
-                    updateURL(roomId);
-                    switchView('connected');
-                } catch (err) {
-                    showToast('❌ Failed to join room.');
-                }
-            }
-
-            async function leaveRoom() {
-                if (!state.roomId) return;
-                stopPolling();
-                try {
-                    if (state.isPlayer1) {
-                        await fbDelete(`/rooms/${state.roomId}`);
-                    } else {
-                        await fbPatch(`/rooms/${state.roomId}`, {
-                            player2: null,
-                            player2Nickname: null,
-                            player2PhotoUrl: null,
-                            status: 'waiting',
-                            votes: { [state.roomData?.player1 || '']: state.roomData?.votes?.[state.roomData?.player1 ||
-                                    ''] || [] },
-                            selectedGame: null,
-                            game: null,
-                        });
-                    }
-                } catch (err) {
-                    console.error('Leave room error:', err);
-                }
-                state.roomId = null;
-                state.roomData = null;
-                state.opponentId = null;
-                state.myVotes = [];
-                state.selectedGame = null;
-                state.gameState = null;
-                clearURL();
-                switchView('unconnected');
-                showToast('👋 Left the room.');
-            }
-
-            function updateURL(roomId) {
-                if (tg) {
-                    // In Telegram, we can set the URL hash or use MainButton
-                }
-                const url = new URL(window.location);
-                url.searchParams.set('room', roomId);
-                window.history.replaceState({}, '', url.toString());
-                $('#room-id-display').textContent = roomId;
-            }
-
-            function clearURL() {
-                const url = new URL(window.location);
-                url.searchParams.delete('room');
-                window.history.replaceState({}, '', url.toString());
-            }
-
-            function copyRoomLink() {
-                const url = new URL(window.location);
-                url.searchParams.set('room', state.roomId);
-                const link = url.toString();
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(link).then(() => showToast('📋 Link copied! Share it with your friend.'));
-                }
-                if (tg) {
-                    tg.openTelegramLink?.('https://t.me/share/url?url=' + encodeURIComponent(link));
-                }
-            }
-
-            function updateConnectedUI() {
-                if (!state.roomData) return;
-                const rd = state.roomData;
-                $('#room-id-display').textContent = state.roomId || '---';
-                $('#p1-name').textContent = rd.player1Nickname || 'Player 1';
-                const p2Chip = $('#p2-chip');
-                const p2Name = $('#p2-name');
-                const p2Dot = p2Chip.querySelector('.dot');
-                if (rd.player2) {
-                    p2Name.textContent = rd.player2Nickname || 'Player 2';
-                    p2Dot.classList.remove('waiting');
-                    $('#room-status-msg').textContent = 'Both players connected! 🎉';
-                } else {
-                    p2Name.textContent = 'Waiting...';
-                    p2Dot.classList.add('waiting');
-                    $('#room-status-msg').textContent = 'Share the link to invite a friend! 📤';
-                }
-
-                // Handle voting vs direct game
-                const votingCard = $('#voting-card');
-                const directGameCard = $('#direct-game-card');
-                const selectedGameCard = $('#selected-game-card');
-
-                if (rd.selectedGame) {
-                    // Game already selected
-                    votingCard.style.display = 'none';
-                    directGameCard.style.display = 'none';
-                    selectedGameCard.style.display = '';
-                    state.selectedGame = rd.selectedGame;
-                    showSelectedGameUI();
-                } else if (rd.specificGame) {
-                    // Direct game mode
-                    votingCard.style.display = 'none';
-                    directGameCard.style.display = '';
-                    selectedGameCard.style.display = 'none';
-                } else if (rd.status === 'voting' && rd.player2) {
-                    // Voting mode
-                    votingCard.style.display = '';
-                    directGameCard.style.display = 'none';
-                    selectedGameCard.style.display = 'none';
-                    updateVotingUI();
-                } else {
-                    votingCard.style.display = 'none';
-                    directGameCard.style.display = 'none';
-                    selectedGameCard.style.display = 'none';
-                }
-
-                // Update opponent data
-                const oppId = state.isPlayer1 ? rd.player2 : rd.player1;
-                if (oppId && oppId !== state.opponentId) {
-                    state.opponentId = oppId;
-                    loadOpponentData(oppId);
-                }
-            }
-
-            async function loadOpponentData(oppId) {
-                try {
-                    const data = await fbGet(`/users/${oppId}`);
-                    state.opponentData = data;
-                } catch (err) {
-                    state.opponentData = null;
-                }
-            }
-
-            function showSelectedGameUI() {
-                const game = state.selectedGame;
-                const card = $('#selected-game-card');
-                if (!game) {
-                    card.style.display = 'none';
-                    return;
-                }
-                card.style.display = '';
-                const emojiMap = { tictactoe: '❌⭕', rps: '🪨📄✂️', chess: '♟️', connect4: '🔴🟡', memory: '🧠' };
-                const nameMap = { tictactoe: 'Tic-Tac-Toe', rps: 'Rock-Paper-Scissors', chess: 'Chess', connect4: 'Connect 4',
-                    memory: 'Memory Match' };
-                $('#selected-game-emoji').textContent = emojiMap[game] || '🎮';
-                $('#selected-game-name').textContent = nameMap[game] || game;
-            }
-
-            // ─────────────────────────────────────
-            // VOTING
-            // ─────────────────────────────────────
-            function updateVotingUI() {
-                const options = $$('#voting-game-list .voting-game-option');
-                options.forEach(opt => {
-                    const game = opt.dataset.game;
-                    if (state.myVotes.includes(game)) {
-                        opt.classList.add('selected');
-                    } else {
-                        opt.classList.remove('selected');
-                    }
-                });
-                $('#vote-count').textContent = `(${state.myVotes.length}/3)`;
-                $('#btn-submit-vote').disabled = state.myVotes.length !== 3;
-
-                // Check opponent status
-                const rd = state.roomData;
-                const oppId = state.isPlayer1 ? rd.player2 : rd.player1;
-                const oppVotes = rd.votes?.[oppId] || [];
-                if (oppVotes.length === 3) {
-                    $('#vote-status').textContent = '✅ Opponent has voted! Waiting for you...';
-                } else if (state.myVotes.length === 3 && oppVotes.length < 3) {
-                    $('#vote-status').textContent = '⏳ Waiting for opponent to vote...';
-                } else {
-                    $('#vote-status').textContent = '';
-                }
-            }
-
-            async function submitVotes() {
-                if (state.myVotes.length !== 3) {
-                    showToast('Please select exactly 3 games.');
-                    return;
-                }
-                try {
-                    await fbPatch(`/rooms/${state.roomId}/votes`, {
-                        [USER_ID]: state.myVotes,
-                    });
-                    state.roomData.votes = state.roomData.votes || {};
-                    state.roomData.votes[USER_ID] = [...state.myVotes];
-                    updateVotingUI();
-                    showToast('✅ Votes submitted!');
-                    // Check if both voted
-                    await checkVotingComplete();
-                } catch (err) {
-                    showToast('❌ Failed to submit votes.');
-                }
-            }
-
-            async function checkVotingComplete() {
-                const rd = state.roomData;
-                const oppId = state.isPlayer1 ? rd.player2 : rd.player1;
-                const myV = rd.votes?.[USER_ID] || [];
-                const oppV = rd.votes?.[oppId] || [];
-                if (myV.length === 3 && oppV.length === 3) {
-                    // Process voting
-                    const selectedGame = processVotingLogic(myV, oppV);
-                    await fbPatch(`/rooms/${state.roomId}`, {
-                        selectedGame: selectedGame,
-                        status: 'playing',
-                    });
-                    state.roomData.selectedGame = selectedGame;
-                    state.roomData.status = 'playing';
-                    state.selectedGame = selectedGame;
-                    updateConnectedUI();
-                }
-            }
-
-            function processVotingLogic(player1Votes, player2Votes) {
-                const common = player1Votes.filter(g => player2Votes.includes(g));
-                if (common.length === 1) {
-                    return common[0];
-                } else if (common.length >= 2) {
-                    return common[Math.floor(Math.random() * common.length)];
-                } else {
-                    const combined = [...new Set([...player1Votes, ...player2Votes])];
-                    return combined[Math.floor(Math.random() * combined.length)];
-                }
-            }
-
-            // ─────────────────────────────────────
-            // GAME LOGIC
-            // ─────────────────────────────────────
-            function startPracticeGame(gameType) {
-                state.gameMode = 'practice';
-                state.gameType = gameType;
-                state.gameState = null;
-                renderGameView();
-                switchView('game');
-            }
-
-            async function startMultiplayerGame(gameType) {
-                state.gameMode = 'multiplayer';
-                state.gameType = gameType;
-                state.gameState = null;
-                // Initialize game in Firebase
-                const gameData = {
-                    type: gameType,
-                    state: gameType === 'tictactoe' ? {
-                        board: Array(9).fill(null),
-                        currentTurn: state.roomData.player1,
-                        moves: [],
-                    } : {
-                        choices: {},
-                    },
-                    currentTurn: state.roomData.player1,
-                    result: null,
-                };
-                try {
-                    await fbPatch(`/rooms/${state.roomId}`, { game: gameData, status: 'playing' });
-                    state.roomData.game = gameData;
-                    state.roomData.status = 'playing';
-                    renderGameView();
-                    switchView('game');
-                } catch (err) {
-                    showToast('❌ Failed to start game.');
-                }
-            }
-
-            function renderGameView() {
-                const container = $('#game-container');
-                const title = $('#game-title');
-                const modeBadge = $('#game-mode-badge');
-                const resultArea = $('#game-result-area');
-                resultArea.style.display = 'none';
-                resultArea.innerHTML = '';
-
-                const gt = state.gameType;
-                title.textContent = gt === 'tictactoe' ? 'Tic-Tac-Toe' : 'Rock-Paper-Scissors';
-                modeBadge.textContent = state.gameMode === 'practice' ? '🤖 Practice' : '🌐 Multiplayer';
-                modeBadge.style.color = state.gameMode === 'practice' ? 'var(--warning)' : 'var(--accent)';
-
-                if (gt === 'tictactoe') {
-                    renderTicTacToe(container);
-                } else if (gt === 'rps') {
-                    renderRPS(container);
-                }
-            }
-
-            // ── Tic-Tac-Toe ─────────────────────
-            function renderTicTacToe(container) {
-                const board = state.gameState?.board || (state.roomData?.game?.state?.board) || Array(9).fill(null);
-                const isMulti = state.gameMode === 'multiplayer';
-                const currentTurn = state.roomData?.game?.currentTurn || state.roomData?.player1;
-                const isMyTurn = !isMulti || currentTurn === USER_ID;
-                const gameOver = state.roomData?.game?.result || state.gameState?.result || null;
-
-                container.innerHTML = `
-                    <div class="game-board-ttt" id="ttt-board">
-                        ${board.map((cell, i) => `
-                            <div class="ttt-cell ${cell ? 'played' : ''} ${gameOver?.winningCells?.includes(i) ? 'winning' : ''}"
-                                 data-index="${i}"
-                                 style="${!isMyTurn && !gameOver ? 'opacity:0.7;' : ''}">
-                                ${cell === 'X' ? '❌' : cell === 'O' ? '⭕' : ''}
-                            </div>
-                        `).join('')}
+                        <div class="score-diff ${diff >= 0 ? 'win' : 'loss'}">${diffText} (${myScore}-${oppScore})</div>
                     </div>
-                    <div style="text-align:center;font-weight:600;min-height:24px;" id="ttt-status">
-                        ${gameOver ? (gameOver.winner === USER_ID ? '🎉 You won!' : gameOver.winner === 'draw' ? '🤝 Draw!' : '😞 You lost!') :
-                            isMyTurn ? 'Your turn!' : "Opponent's turn..."}
-                    </div>
-                    ${gameOver ? '<button class="btn btn-primary" id="btn-ttt-rematch" style="margin-top:8px;">🔄 Play Again</button>' : ''}
                 `;
-
-                // Add click handlers
-                container.querySelectorAll('.ttt-cell:not(.played)').forEach(cell => {
-                    cell.addEventListener('click', () => {
-                        const index = parseInt(cell.dataset.index);
-                        handleTTTMove(index);
-                    });
-                });
-
-                if (gameOver) {
-                    const rematchBtn = container.querySelector('#btn-ttt-rematch');
-                    if (rematchBtn) {
-                        rematchBtn.addEventListener('click', () => {
-                            if (state.gameMode === 'practice') {
-                                startPracticeGame('tictactoe');
-                            } else {
-                                resetMultiplayerGame();
-                            }
-                        });
-                    }
-                }
-
-                // Bot move in practice mode
-                if (state.gameMode === 'practice' && isMyTurn && !gameOver && state.gameState?.currentPlayer === 'bot') {
-                    setTimeout(() => botTTTMove(), 500);
-                }
             }
+        });
+        container.innerHTML = html || '<p style="color:var(--text-muted)">No matches played yet.</p>';
+    }
 
-            function handleTTTMove(index) {
-                if (state.gameMode === 'practice') {
-                    handlePracticeTTTMove(index);
+    async function inspectUser(oppId) {
+        const targetUser = await fbCall('GET', `users/${oppId}`);
+        if (!targetUser) return;
+
+        document.getElementById('modal-username').innerText = targetUser.nickname || targetUser.username;
+        document.getElementById('modal-score').innerText = `Total Score: ${targetUser.score || 0}`;
+
+        const matches = await fbCall('GET', 'matches');
+        let html = '';
+        if (matches) {
+            Object.values(matches).reverse().forEach(m => {
+                const isMutual = (m.p1 === USER_ID && m.p2 === oppId) || (m.p1 === oppId && m.p2 === USER_ID);
+                const isTargetMatch = m.p1 === oppId || m.p2 === oppId;
+
+                if (isMutual || (targetUser.showHistory && isTargetMatch)) {
+                    html += `<div style="padding: 6px 0; border-bottom: 1px solid var(--card-border); font-size:0.85rem;">
+                        ${m.game.toUpperCase()} - ${m.p1Name} (${m.p1Score}) vs ${m.p2Name} (${m.p2Score})
+                    </div>`;
+                }
+            });
+        }
+        document.getElementById('modal-history-list').innerHTML = html || '<p style="color:var(--text-muted); font-size:0.8rem;">Private history.</p>';
+        document.getElementById('profile-modal').classList.remove('hidden');
+    }
+
+    function closeModal() { document.getElementById('profile-modal').classList.add('hidden'); }
+
+    async function joinRoomProcess(roomId, directGame) {
+        state.roomId = roomId;
+        switchView('connected');
+        document.getElementById('room-title').innerText = `Room: ${roomId}`;
+
+        let room = await fbCall('GET', `rooms/${roomId}`);
+        if (!room) return;
+
+        if (room.host !== USER_ID && !room.guest) {
+            await fbCall('PATCH', `rooms/${roomId}`, { guest: USER_ID, guestName: USER_NAME, status: 'connected' });
+        }
+
+        startPolling();
+    }
+
+    function startPolling() {
+        stopPolling();
+        state.pollingTimer = setInterval(async () => {
+            if (!state.roomId) return;
+            const room = await fbCall('GET', `rooms/${state.roomId}`);
+            if (!room) return;
+
+            if (room.guest) {
+                document.getElementById('room-status').innerText = `Connected with opponent!`;
+
+                if (room.mode === 'direct') {
+                    document.getElementById('direct-box').classList.remove('hidden');
+                    state.gameType = room.game;
                 } else {
-                    handleMultiplayerTTTMove(index);
-                }
-            }
-
-            function handlePracticeTTTMove(index) {
-                if (!state.gameState) {
-                    state.gameState = { board: Array(9).fill(null), currentPlayer: 'human', result: null };
-                }
-                const gs = state.gameState;
-                if (gs.board[index] || gs.result || gs.currentPlayer !== 'human') return;
-                gs.board[index] = 'X';
-                gs.currentPlayer = 'bot';
-                const result = checkTTTWin(gs.board);
-                if (result) {
-                    gs.result = result;
-                    gs.currentPlayer = null;
-                }
-                renderTicTacToe($('#game-container'));
-                if (!gs.result) {
-                    setTimeout(() => botTTTMove(), 400);
-                }
-            }
-
-            function botTTTMove() {
-                if (!state.gameState || state.gameState.result || state.gameState.currentPlayer !== 'bot') return;
-                const gs = state.gameState;
-                const board = [...gs.board];
-                // Simple AI: win, block, center, corners, random
-                const emptyIndices = board.map((v, i) => v === null ? i : null).filter(v => v !== null);
-                if (emptyIndices.length === 0) return;
-
-                let move = null;
-                // Try to win
-                for (const i of emptyIndices) {
-                    const test = [...board];
-                    test[i] = 'O';
-                    if (checkTTTWin(test)?.winner === 'O') { move = i; break; }
-                }
-                // Block human
-                if (move === null) {
-                    for (const i of emptyIndices) {
-                        const test = [...board];
-                        test[i] = 'X';
-                        if (checkTTTWin(test)?.winner === 'X') { move = i; break; }
+                    document.getElementById('voting-box').classList.remove('hidden');
+                    if (room.votes && room.votes[room.host] && room.votes[room.guest]) {
+                        resolveVoting(room.votes[room.host], room.votes[room.guest]);
                     }
                 }
-                // Center
-                if (move === null && emptyIndices.includes(4)) move = 4;
-                // Corners
-                if (move === null) {
-                    const corners = [0, 2, 6, 8].filter(i => emptyIndices.includes(i));
-                    if (corners.length > 0) move = corners[Math.floor(Math.random() * corners.length)];
-                }
-                // Random
-                if (move === null) move = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
 
-                gs.board[move] = 'O';
-                gs.currentPlayer = 'human';
-                const result = checkTTTWin(gs.board);
-                if (result) {
-                    gs.result = result;
-                    gs.currentPlayer = null;
-                }
-                renderTicTacToe($('#game-container'));
-            }
-
-            function checkTTTWin(board) {
-                const lines = [
-                    [0, 1, 2],
-                    [3, 4, 5],
-                    [6, 7, 8],
-                    [0, 3, 6],
-                    [1, 4, 7],
-                    [2, 5, 8],
-                    [0, 4, 8],
-                    [2, 4, 6]
-                ];
-                for (const [a, b, c] of lines) {
-                    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-                        return { winner: board[a] === 'X' ? 'human' : 'bot', winningCells: [a, b, c] };
-                    }
-                }
-                if (board.every(c => c !== null)) return { winner: 'draw', winningCells: [] };
-                return null;
-            }
-
-            async function handleMultiplayerTTTMove(index) {
-                const game = state.roomData?.game;
-                if (!game || game.result) return;
-                if (game.currentTurn !== USER_ID) {
-                    showToast("It's not your turn!");
-                    return;
-                }
-                const board = [...game.state.board];
-                if (board[index]) return;
-                const mySymbol = state.isPlayer1 ? 'X' : 'O';
-                board[index] = mySymbol;
-                const newMoves = [...(game.state.moves || []), { index, player: USER_ID, symbol: mySymbol }];
-                const oppId = state.isPlayer1 ? state.roomData.player2 : state.roomData.player1;
-
-                // Check win
-                const result = checkTTTWinMulti(board, USER_ID, oppId);
-                const newGameState = {
-                    type: 'tictactoe',
-                    state: { board, currentTurn: result ? null : oppId, moves: newMoves },
-                    currentTurn: result ? null : oppId,
-                    result: result,
-                };
-
-                try {
-                    await fbPatch(`/rooms/${state.roomId}`, { game: newGameState });
-                    state.roomData.game = newGameState;
-                    if (result) {
-                        await recordMatchResult(result);
-                    }
-                    renderTicTacToe($('#game-container'));
-                } catch (err) {
-                    showToast('❌ Failed to make move.');
+                if (room.status === 'playing' && state.currentView !== 'game') {
+                    state.gameType = room.selectedGame;
+                    launchGameArena(false);
                 }
             }
+        }, 1500);
+    }
 
-            function checkTTTWinMulti(board, playerId, opponentId) {
-                const lines = [
-                    [0, 1, 2],
-                    [3, 4, 5],
-                    [6, 7, 8],
-                    [0, 3, 6],
-                    [1, 4, 7],
-                    [2, 5, 8],
-                    [0, 4, 8],
-                    [2, 4, 6]
-                ];
-                const playerSymbol = state.isPlayer1 ? 'X' : 'O';
-                for (const [a, b, c] of lines) {
-                    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-                        const winnerSymbol = board[a];
-                        const winner = winnerSymbol === (state.isPlayer1 ? 'X' : 'O') ? playerId : opponentId;
-                        return {
-                            winner: winner,
-                            loser: winner === playerId ? opponentId : playerId,
-                            draw: false,
-                            winningCells: [a, b, c],
-                        };
-                    }
-                }
-                if (board.every(c => c !== null)) return { winner: 'draw', loser: null, draw: true, winningCells: [] };
-                return null;
-            }
+    function stopPolling() { if (state.pollingTimer) clearInterval(state.pollingTimer); }
 
-            async function resetMultiplayerGame() {
-                const gameData = {
-                    type: state.gameType,
-                    state: state.gameType === 'tictactoe' ? {
-                        board: Array(9).fill(null),
-                        currentTurn: state.roomData.player1,
-                        moves: [],
-                    } : { choices: {} },
-                    currentTurn: state.roomData.player1,
-                    result: null,
-                };
-                await fbPatch(`/rooms/${state.roomId}`, { game: gameData });
-                state.roomData.game = gameData;
-                renderGameView();
-            }
+    function toggleVote(game) {
+        const idx = state.selectedVotes.indexOf(game);
+        if (idx > -1) state.selectedVotes.splice(idx, 1);
+        else if (state.selectedVotes.length < 3) state.selectedVotes.push(game);
 
-            function handleMultiplayerGameSync(gameData) {
-                if (state.gameMode !== 'multiplayer') return;
-                state.roomData.game = gameData;
-                if (state.gameType === 'tictactoe') {
-                    renderTicTacToe($('#game-container'));
-                } else if (state.gameType === 'rps') {
-                    checkRPSResult(gameData);
-                }
-            }
+        document.querySelectorAll('.vote-card').forEach(card => {
+            const g = card.getAttribute('onclick').match(/'([^']+)'/)[1];
+            if (state.selectedVotes.includes(g)) card.classList.add('selected');
+            else card.classList.remove('selected');
+        });
 
-            // ── Rock-Paper-Scissors ─────────────
-            function renderRPS(container) {
-                const isMulti = state.gameMode === 'multiplayer';
-                const gameData = state.roomData?.game;
-                const myChoice = isMulti ? (gameData?.state?.choices?.[USER_ID] || null) : (state.gameState?.myChoice ||
-                    null);
-                const result = isMulti ? gameData?.result : (state.gameState?.result || null);
-                const gameOver = !!result;
+        document.getElementById('vote-count').innerText = state.selectedVotes.length;
+        document.getElementById('btn-submit-vote').disabled = state.selectedVotes.length !== 3;
+    }
 
-                container.innerHTML = `
-                    <div style="text-align:center;font-size:1.1rem;font-weight:600;">
-                        ${gameOver ? '' : 'Choose your move:'}
-                    </div>
-                    <div class="rps-choices">
-                        <button class="rps-btn ${myChoice === 'rock' ? 'selected' : ''}" data-choice="rock" ${gameOver ? 'disabled' : ''}>🪨</button>
-                        <button class="rps-btn ${myChoice === 'paper' ? 'selected' : ''}" data-choice="paper" ${gameOver ? 'disabled' : ''}>📄</button>
-                        <button class="rps-btn ${myChoice === 'scissors' ? 'selected' : ''}" data-choice="scissors" ${gameOver ? 'disabled' : ''}>✂️</button>
-                    </div>
-                    <div id="rps-result-area" style="text-align:center;min-height:30px;">
-                        ${gameOver ? renderRPSResultBanner(result, USER_ID) : (myChoice ? '✅ Choice locked! Waiting...' : '')}
-                    </div>
-                    ${gameOver ? '<button class="btn btn-primary" id="btn-rps-rematch" style="margin-top:8px;">🔄 Play Again</button>' : ''}
-                `;
+    async function submitVotes() {
+        await fbCall('PATCH', `rooms/${state.roomId}/votes`, { [USER_ID]: state.selectedVotes });
+        document.getElementById('room-status').innerText = 'Votes submitted! Waiting for opponent...';
+        document.getElementById('voting-box').classList.add('hidden');
+    }
 
-                // Add click handlers
-                container.querySelectorAll('.rps-btn:not([disabled])').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const choice = btn.dataset.choice;
-                        handleRPSChoice(choice);
-                    });
-                });
+    async function resolveVoting(v1, v2) {
+        const common = v1.filter(x => v2.includes(x));
+        let finalGame = '';
 
-                if (gameOver) {
-                    const rematchBtn = container.querySelector('#btn-rps-rematch');
-                    if (rematchBtn) {
-                        rematchBtn.addEventListener('click', () => {
-                            if (state.gameMode === 'practice') {
-                                startPracticeGame('rps');
-                            } else {
-                                resetMultiplayerGame();
-                            }
-                        });
-                    }
-                }
-            }
+        if (common.length === 1) finalGame = common[0];
+        else if (common.length > 1) finalGame = common[Math.floor(Math.random() * common.length)];
+        else {
+            const combined = [...new Set([...v1, ...v2])];
+            finalGame = combined[Math.floor(Math.random() * combined.length)];
+        }
 
-            function handleRPSChoice(choice) {
-                if (state.gameMode === 'practice') {
-                    handlePracticeRPS(choice);
+        await fbCall('PATCH', `rooms/${state.roomId}`, { status: 'playing', selectedGame: finalGame });
+    }
+
+    async function startDirectGame() {
+        await fbCall('PATCH', `rooms/${state.roomId}`, { status: 'playing', selectedGame: state.gameType });
+    }
+
+    function leaveRoom() {
+        stopPolling();
+        state.roomId = null;
+        window.history.replaceState({}, '', window.location.pathname);
+        switchView('unconnected');
+    }
+
+    function startPractice(game) {
+        state.isPractice = true;
+        state.gameType = game;
+        launchGameArena(true);
+    }
+
+    function launchGameArena(isPractice) {
+        switchView('game');
+        document.getElementById('game-title').innerText = `${state.gameType.toUpperCase()} ${isPractice ? '(AI Practice)' : '(Ranked)'}`;
+        document.getElementById('arena-ttt').classList.add('hidden');
+        document.getElementById('arena-rps').classList.add('hidden');
+
+        if (state.gameType === 'tictactoe') {
+            document.getElementById('arena-ttt').classList.remove('hidden');
+            resetTTT();
+        } else if (state.gameType === 'rps') {
+            document.getElementById('arena-rps').classList.remove('hidden');
+        }
+    }
+
+    function resetTTT() {
+        state.tttBoard = Array(9).fill('');
+        state.myTurn = true;
+        document.querySelectorAll('.ttt-cell').forEach(c => c.innerText = '');
+        document.getElementById('game-status-text').innerText = 'Your Turn (X)';
+    }
+
+    function handleTTTClick(idx) {
+        if (!state.myTurn || state.tttBoard[idx] !== '') return;
+
+        state.tttBoard[idx] = 'X';
+        document.querySelectorAll('.ttt-cell')[idx].innerText = 'X';
+
+        if (checkTTTWin('X')) {
+            document.getElementById('game-status-text').innerText = '🎉 You Won!';
+            finishGame(10, 0);
+            return;
+        }
+
+        if (state.tttBoard.every(c => c !== '')) {
+            document.getElementById('game-status-text').innerText = '🤝 Draw Game!';
+            finishGame(5, 5);
+            return;
+        }
+
+        if (state.isPractice) {
+            state.myTurn = false;
+            document.getElementById('game-status-text').innerText = 'AI thinking...';
+            setTimeout(() => {
+                const empty = state.tttBoard.map((v, i) => v === '' ? i : null).filter(v => v !== null);
+                const pick = empty[Math.floor(Math.random() * empty.length)];
+                state.tttBoard[pick] = 'O';
+                document.querySelectorAll('.ttt-cell')[pick].innerText = 'O';
+
+                if (checkTTTWin('O')) {
+                    document.getElementById('game-status-text').innerText = '🤖 AI Won!';
                 } else {
-                    handleMultiplayerRPS(choice);
+                    state.myTurn = true;
+                    document.getElementById('game-status-text').innerText = 'Your Turn (X)';
                 }
-            }
+            }, 600);
+        }
+    }
 
-            function handlePracticeRPS(choice) {
-                const botChoices = ['rock', 'paper', 'scissors'];
-                const botChoice = botChoices[Math.floor(Math.random() * 3)];
-                const result = determineRPSWinner(choice, botChoice);
-                state.gameState = {
-                    myChoice: choice,
-                    botChoice: botChoice,
-                    result: { winner: result === 'win' ? 'human' : result === 'lose' ? 'bot' : 'draw', humanChoice: choice,
-                        botChoice: botChoice, draw: result === 'draw' },
-                };
-                renderRPS($('#game-container'));
-            }
+    function checkTTTWin(p) {
+        const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+        return wins.some(w => w.every(i => state.tttBoard[i] === p));
+    }
 
-            async function handleMultiplayerRPS(choice) {
-                const gameData = state.roomData?.game;
-                if (!gameData || gameData.result) return;
-                const newChoices = { ...(gameData.state?.choices || {}), [USER_ID]: choice };
-                const newGameState = {
-                    type: 'rps',
-                    state: { choices: newChoices },
-                    currentTurn: null,
-                    result: null,
-                };
-                try {
-                    await fbPatch(`/rooms/${state.roomId}`, { game: newGameState });
-                    state.roomData.game = newGameState;
-                    renderRPS($('#game-container'));
-                    await checkRPSComplete(newChoices);
-                } catch (err) {
-                    showToast('❌ Failed to submit choice.');
-                }
-            }
+    function handleRPSClick(choice) {
+        if (state.isPractice) {
+            const choices = ['rock', 'paper', 'scissors'];
+            const ai = choices[Math.floor(Math.random() * choices.length)];
+            let res = choice === ai ? 'Draw' : (choice==='rock'&&ai==='scissors')||(choice==='paper'&&ai==='rock')||(choice==='scissors'&&ai==='paper') ? 'You Won' : 'AI Won';
+            document.getElementById('game-status-text').innerText = `${res}! AI picked ${ai}`;
+        } else {
+            finishGame(10, 0);
+        }
+    }
 
-            async function checkRPSComplete(choices) {
-                const oppId = state.isPlayer1 ? state.roomData.player2 : state.roomData.player1;
-                if (choices[USER_ID] && choices[oppId]) {
-                    const myChoice = choices[USER_ID];
-                    const oppChoice = choices[oppId];
-                    const outcome = determineRPSWinner(myChoice, oppChoice);
-                    let result;
-                    if (outcome === 'win') {
-                        result = { winner: USER_ID, loser: oppId, draw: false, humanChoice: myChoice, botChoice: oppChoice };
-                    } else if (outcome === 'lose') {
-                        result = { winner: oppId, loser: USER_ID, draw: false, humanChoice: myChoice, botChoice: oppChoice };
-                    } else {
-                        result = { winner: 'draw', loser: null, draw: true, humanChoice: myChoice, botChoice: oppChoice };
-                    }
-                    const finalGameState = {
-                        type: 'rps',
-                        state: { choices },
-                        currentTurn: null,
-                        result,
-                    };
-                    await fbPatch(`/rooms/${state.roomId}`, { game: finalGameState });
-                    state.roomData.game = finalGameState;
-                    await recordMatchResult(result);
-                    renderRPS($('#game-container'));
-                }
-            }
+    async function finishGame(myScore, oppScore) {
+        if (state.isPractice) return;
 
-            function checkRPSResult(gameData) {
-                if (gameData?.result && state.gameType === 'rps') {
-                    renderRPS($('#game-container'));
-                }
-            }
+        const room = await fbCall('GET', `rooms/${state.roomId}`);
+        const isHost = room.host === USER_ID;
+        const oppId = isHost ? room.guest : room.host;
+        const oppName = isHost ? room.guestName : room.hostName;
 
-            function determineRPSWinner(choice1, choice2) {
-                if (choice1 === choice2) return 'draw';
-                const wins = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
-                return wins[choice1] === choice2 ? 'win' : 'lose';
-            }
+        const matchRecord = {
+            p1: USER_ID, p1Name: USER_NAME, p1Score: myScore,
+            p2: oppId, p2Name: oppName, p2Score: oppScore,
+            game: state.gameType, timestamp: Date.now()
+        };
 
-            function renderRPSResultBanner(result, userId) {
-                if (result.draw) {
-                    return '<div class="game-result-banner result-draw">🤝 It\'s a Draw!</div>';
-                }
-                const iWon = result.winner === userId;
-                return `<div class="game-result-banner ${iWon ? 'result-win' : 'result-lose'}">
-                    ${iWon ? '🎉 You Won!' : '😞 You Lost!'}
-                    <div style="font-size:0.9rem;">You: ${result.humanChoice || '?'} vs Opponent: ${result.botChoice || '?'}</div>
-                </div>`;
-            }
+        await fbCall('POST', 'matches', matchRecord);
 
-            // ─────────────────────────────────────
-            // MATCH RECORDING (Multiplayer only)
-            // ─────────────────────────────────────
-            async function recordMatchResult(result) {
-                if (state.gameMode !== 'multiplayer') return;
-                const oppId = state.isPlayer1 ? state.roomData.player2 : state.roomData.player1;
-                if (!oppId) return;
+        const currentU = await fbCall('GET', `users/${USER_ID}`);
+        await fbCall('PATCH', `users/${USER_ID}`, { score: (currentU.score || 0) + myScore });
 
-                const isDraw = result.draw;
-                const iWon = result.winner === USER_ID;
-                const scoreChange = isDraw ? 0 : (iWon ? 10 : -5);
-                const oppScoreChange = isDraw ? 0 : (iWon ? -5 : 10);
+        loadHistory();
+    }
 
-                const matchData = {
-                    player1: state.isPlayer1 ? USER_ID : oppId,
-                    player2: state.isPlayer1 ? oppId : USER_ID,
-                    game: state.gameType,
-                    result: isDraw ? 'draw' : (result.winner === (state.isPlayer1 ? USER_ID : oppId) ? 'player1_win' :
-                        'player2_win'),
-                    player1ScoreChange: state.isPlayer1 ? scoreChange : oppScoreChange,
-                    player2ScoreChange: state.isPlayer1 ? oppScoreChange : scoreChange,
-                    playedAt: Date.now(),
-                    roomId: state.roomId,
-                    opponentNickname: state.opponentData?.nickname || 'Player',
-                };
+    function exitArena() {
+        if (state.isPractice) {
+            switchView('unconnected');
+        } else {
+            switchView('connected');
+        }
+    }
 
-                try {
-                    const matchRef = await fbPost('/matches', matchData);
-                    const matchId = matchRef.name;
-                    // Update both users' history
-                    await fbPatch(`/users/${USER_ID}/history`, { [matchId]: true });
-                    await fbPatch(`/users/${oppId}/history`, { [matchId]: true });
-                    // Update scores
-                    const myData = await fbGet(`/users/${USER_ID}`);
-                    const oppData = await fbGet(`/users/${oppId}`);
-                    await fbPatch(`/users/${USER_ID}`, {
-                        score: (myData?.score || 0) + scoreChange,
-                        gamesPlayed: (myData?.gamesPlayed || 0) + 1,
-                        gamesWon: (myData?.gamesWon || 0) + (iWon ? 1 : 0),
-                    });
-                    await fbPatch(`/users/${oppId}`, {
-                        score: (oppData?.score || 0) + oppScoreChange,
-                        gamesPlayed: (oppData?.gamesPlayed || 0) + 1,
-                        gamesWon: (oppData?.gamesWon || 0) + (!isDraw && !iWon ? 1 : 0),
-                    });
-                    state.score = (myData?.score || 0) + scoreChange;
-                    state.gamesPlayed = (myData?.gamesPlayed || 0) + 1;
-                    if (iWon) state.gamesWon = (myData?.gamesWon || 0) + 1;
-                } catch (err) {
-                    console.error('Record match error:', err);
-                }
-            }
-
-            // ─────────────────────────────────────
-            // EVENT HANDLERS
-            // ─────────────────────────────────────
-            $('#btn-save-nickname').addEventListener('click', saveNickname);
-            $('#toggle-history-privacy').addEventListener('change', savePrivacyToggle);
-            $('#btn-create-room').addEventListener('click', createRoom);
-            $('#btn-leave-room').addEventListener('click', leaveRoom);
-            $('#room-id-display').addEventListener('click', copyRoomLink);
-            $('#btn-game-back').addEventListener('click', () => {
-                if (state.gameMode === 'multiplayer' && state.roomId) {
-                    switchView('connected');
-                } else {
-                    state.gameState = null;
-                    switchView('unconnected');
-                }
-            });
-            $('#modal-profile-close').addEventListener('click', closeProfileModal);
-            $('#modal-profile-overlay').addEventListener('click', (e) => {
-                if (e.target === $('#modal-profile-overlay')) closeProfileModal();
-            });
-
-            // Practice game buttons
-            $$('.practice-game-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const game = btn.dataset.game;
-                    startPracticeGame(game);
-                });
-            });
-
-            // Voting game options
-            $('#voting-game-list').addEventListener('click', (e) => {
-                const option = e.target.closest('.voting-game-option');
-                if (!option) return;
-                const game = option.dataset.game;
-                if (state.myVotes.includes(game)) {
-                    state.myVotes = state.myVotes.filter(g => g !== game);
-                } else if (state.myVotes.length < 3) {
-                    state.myVotes.push(game);
-                } else {
-                    showToast('You can only select 3 games.');
-                    return;
-                }
-                updateVotingUI();
-            });
-
-            $('#btn-submit-vote').addEventListener('click', submitVotes);
-
-            // Direct game start
-            $('#btn-start-direct-game').addEventListener('click', async () => {
-                const game = state.roomData.specificGame;
-                if (game) {
-                    await fbPatch(`/rooms/${state.roomId}`, { selectedGame: game, status: 'playing' });
-                    state.roomData.selectedGame = game;
-                    state.selectedGame = game;
-                    startMultiplayerGame(game);
-                }
-            });
-
-            // Selected game start (post-voting)
-            $('#btn-start-selected-game').addEventListener('click', () => {
-                if (state.selectedGame) {
-                    startMultiplayerGame(state.selectedGame);
-                }
-            });
-
-            // ─────────────────────────────────────
-            // INITIALIZATION
-            // ─────────────────────────────────────
-            async function init() {
-                // Apply Telegram theme colors if available
-                if (tgThemeParams.bg_color) {
-                    document.documentElement.style.setProperty('--bg', tgThemeParams.bg_color);
-                }
-                if (tgThemeParams.secondary_bg_color) {
-                    document.documentElement.style.setProperty('--surface', tgThemeParams.secondary_bg_color);
-                }
-                if (tgThemeParams.section_bg_color) {
-                    document.documentElement.style.setProperty('--surface2', tgThemeParams.section_bg_color);
-                }
-                if (tgThemeParams.text_color) {
-                    document.documentElement.style.setProperty('--text', tgThemeParams.text_color);
-                }
-                if (tgThemeParams.hint_color) {
-                    document.documentElement.style.setProperty('--text-secondary', tgThemeParams.hint_color);
-                }
-                if (tgThemeParams.button_color) {
-                    document.documentElement.style.setProperty('--accent', tgThemeParams.button_color);
-                }
-                if (tgThemeParams.button_text_color) {
-                    document.documentElement.style.setProperty('--button-text', tgThemeParams.button_text_color);
-                }
-
-                await loadUserData();
-                await loadHistory();
-
-                // Check URL for room parameter
-                const urlParams = new URLSearchParams(window.location.search);
-                const roomParam = urlParams.get('room');
-                if (roomParam) {
-                    await joinRoom(roomParam);
-                } else {
-                    switchView('unconnected');
-                }
-
-                // Set up back button handling for Telegram
-                if (tg) {
-                    tg.BackButton.onClick(() => {
-                        if (state.currentView === 'game') {
-                            if (state.gameMode === 'multiplayer' && state.roomId) {
-                                switchView('connected');
-                            } else {
-                                state.gameState = null;
-                                switchView('unconnected');
-                            }
-                        } else if (state.currentView === 'connected') {
-                            leaveRoom();
-                        }
-                    });
-                    if (state.currentView !== 'unconnected') {
-                        tg.BackButton.show();
-                    }
-                }
-            }
-
-            // Update BackButton visibility
-            const originalSwitchView = switchView;
-            switchView = function(viewName) {
-                originalSwitchView(viewName);
-                if (tg) {
-                    if (viewName === 'unconnected') {
-                        tg.BackButton.hide();
-                    } else {
-                        tg.BackButton.show();
-                    }
-                }
-            };
-
-            init().catch(err => {
-                console.error('Init error:', err);
-                showToast('⚠️ Error initializing app. Check Firebase config.');
-            });
-
-            // Cleanup polling on page unload
-            window.addEventListener('beforeunload', () => {
-                stopPolling();
-            });
-
-            console.log('🚀 Game Hub initialized!');
-            console.log('👤 User:', USER_USERNAME, '(ID:', USER_ID, ')');
-            console.log('📡 Firebase:', FIREBASE_DB_URL);
-        })();
-    </script>
+    window.onload = init;
+</script>
 </body>
 </html>
