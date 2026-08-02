@@ -2,12 +2,33 @@ import random
 import string
 import time
 import httpx
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = "8907138819:AAFaoYPga8s6KqwfSy6z2d0jACa1CA8LZl4"
 FIREBASE_URL = "https://nexus-duos-default-rtdb.asia-southeast1.firebasedatabase.app"
 WEBAPP_URL = "https://nexus-duos-bot.vercel.app/"
+
+# ==========================================
+# DUMMY WEB SERVER (FOR RENDER DEPLOYMENT)
+# ==========================================
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b"Nexus Duos Telegram Bot is running smoothly!")
+
+def run_dummy_server():
+    # Render က ပေးမည့် PORT ကို ယူမည်၊ မရှိပါက 10000 ကို သုံးမည်
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), DummyHandler)
+    print(f"Dummy web server started on port {port} for Render")
+    server.serve_forever()
+# ==========================================
 
 def generate_room_code():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -26,18 +47,21 @@ async def fb_get(path: str):
         return res.json()
 
 async def sync_user_profile(user):
-    user_id = str(user.id)
-    user_data = await fb_get(f"users/{user_id}")
-    if not user_data:
-        new_profile = {
-            "id": user_id,
-            "username": user.username or user.first_name,
-            "nickname": user.first_name,
-            "photo_url": "",
-            "showHistory": False,
-            "score": 0
-        }
-        await fb_put(f"users/{user_id}", new_profile)
+    try:
+        user_id = str(user.id)
+        user_data = await fb_get(f"users/{user_id}")
+        if not user_data:
+            new_profile = {
+                "id": user_id,
+                "username": user.username or user.first_name,
+                "nickname": user.first_name,
+                "photo_url": "",
+                "showHistory": False,
+                "score": 0
+            }
+            await fb_put(f"users/{user_id}", new_profile)
+    except Exception as e:
+        print(f"Firebase Sync Error: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -50,8 +74,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("✂️ Rock-Paper-Scissors Invite", callback_data="mode_game_rps")]
     ]
     
+    # HTML Parse Error မဖြစ်စေရန် user.first_name မှ < > များကို ဖယ်ရှား/အစားထိုးပါသည်
+    safe_name = user.first_name.replace("<", "").replace(">", "")
+    
     welcome_text = (
-        f"Welcome <b>{user.first_name}</b>! ✅ Profile synced.\n\n"
+        f"Welcome <b>{safe_name}</b>! ✅ Profile synced.\n\n"
         "Choose how you want to play or use commands:\n"
         "• /createroom - Create a multiplayer voting room\n"
         "• /play &lt;game&gt; - Direct game room (e.g. /play tictactoe)\n"
@@ -89,7 +116,6 @@ async def create_and_send_room(update: Update, context: ContextTypes.DEFAULT_TYP
         room_code = generate_room_code()
         user_id_str = str(user.id)
         
-        # Web App (index.html) အသစ်နှင့် အံဝင်ခွင်ကျဖြစ်စေမည့် Data Fields များ
         room_data = {
             "id": room_code,
             "host": user_id_str,
@@ -160,7 +186,6 @@ async def process_join(update: Update, context: ContextTypes.DEFAULT_TYPE, room_
         await update.message.reply_text("You are the host of this room.")
         return
 
-    # Web App (index.html) အသစ်နှင့် အံဝင်ခွင်ကျဖြစ်စေမည့် Data Fields များ
     user_id_str = str(user.id)
     update_payload = {
         "guest": user_id_str,
@@ -209,6 +234,10 @@ async def join_underscore_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
             await process_join(update, context, room_code)
 
 if __name__ == '__main__':
+    # 1. Start Dummy Web Server in the background
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    
+    # 2. Start Telegram Bot
     app = ApplicationBuilder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
