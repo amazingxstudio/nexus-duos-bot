@@ -1,5 +1,6 @@
 import random
 import string
+import time
 import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -88,18 +89,17 @@ async def create_and_send_room(update: Update, context: ContextTypes.DEFAULT_TYP
         room_code = generate_room_code()
         user_id_str = str(user.id)
         
+        # Web App (index.html) အသစ်နှင့် အံဝင်ခွင်ကျဖြစ်စေမည့် Data Fields များ
         room_data = {
             "id": room_code,
-            "p1": user_id_str,
-            "p1_name": user.first_name,
-            "p2": None,
-            "p2_name": None,
             "host": user_id_str,
             "hostName": user.first_name,
+            "guest": None,
+            "guestName": None,
             "mode": "direct" if game_type else "voting",
-            "specific_game": game_type,
             "game": game_type,
-            "status": "waiting"
+            "status": "waiting",
+            "createdAt": int(time.time() * 1000)
         }
         await fb_put(f"rooms/{room_code}", room_data)
         
@@ -155,15 +155,14 @@ async def process_join(update: Update, context: ContextTypes.DEFAULT_TYPE, room_
         await update.message.reply_text("Room not found or expired.")
         return
         
-    p1_id = str(room.get("p1") or room.get("host"))
-    if p1_id == str(user.id):
+    host_id_str = str(room.get("host"))
+    if host_id_str == str(user.id):
         await update.message.reply_text("You are the host of this room.")
         return
 
+    # Web App (index.html) အသစ်နှင့် အံဝင်ခွင်ကျဖြစ်စေမည့် Data Fields များ
     user_id_str = str(user.id)
     update_payload = {
-        "p2": user_id_str,
-        "p2_name": user.first_name,
         "guest": user_id_str,
         "guestName": user.first_name,
         "status": "connected"
@@ -171,7 +170,7 @@ async def process_join(update: Update, context: ContextTypes.DEFAULT_TYPE, room_
     await fb_patch(f"rooms/{room_code}", update_payload)
     
     invite_url = f"{WEBAPP_URL}?room={room_code}"
-    game = room.get("specific_game") or room.get("game")
+    game = room.get("game")
     if game:
         invite_url += f"&game={game}"
         
@@ -184,7 +183,7 @@ async def process_join(update: Update, context: ContextTypes.DEFAULT_TYPE, room_
     )
 
     try:
-        host_id = int(p1_id)
+        host_id = int(host_id_str)
         await context.bot.send_message(
             chat_id=host_id,
             text=f"Another player ({user.first_name}) joined Room <code>{room_code}</code>! Click to launch:",
@@ -220,5 +219,4 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(handle_callback))
     
     print("Bot is running...")
-    app.run_polling()
-
+    app.run_polling)
