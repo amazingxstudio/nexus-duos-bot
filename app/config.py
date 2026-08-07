@@ -10,11 +10,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str | None = None
 
     DATABASE_URL: str
-    # Redis removed — Render's free tier requires a card for Key Value.
-    # Match/session state now lives in server memory (see app/state.py).
-    # Re-introduce REDIS_URL later (e.g. via Upstash's free tier) if you
-    # scale beyond a single instance.
-  
+    REDIS_URL: str
+
     TELEGRAM_BOT_TOKEN: str
     TELEGRAM_WEBAPP_URL: str
 
