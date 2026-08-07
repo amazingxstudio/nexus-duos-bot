@@ -5,6 +5,7 @@ asyncpg==0.29.0
 pydantic==2.9.2
 pydantic-settings==2.5.2
 python-jose[cryptography]==3.3.0
+redis==5.0.8
 python-telegram-bot==21.6
 python-socketio==5.11.4
 python-dotenv==1.0.1
