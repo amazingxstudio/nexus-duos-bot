@@ -77,4 +77,3 @@ async def telegram_login(body: TelegramLoginRequest, db: AsyncSession = Depends(
 @router.post("/logout")
 async def logout():
     return {"ok": True}
-  
