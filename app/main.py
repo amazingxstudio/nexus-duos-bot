@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
+from app.cache import ping_redis
 from app.bot import build_bot_application
 
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +20,8 @@ bot_app = build_bot_application()
 async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database ready")
+    redis_ok = await ping_redis()
+    logger.info("🔴 Redis connected" if redis_ok else "⚠️ Redis connection FAILED — check REDIS_URL")
 
     # Run the Telegram bot's polling loop alongside the API server.
     await bot_app.initialize()
@@ -46,7 +49,8 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    redis_ok = await ping_redis()
+    return {"status": "ok", "redis": "connected" if redis_ok else "disconnected"}
 
 
 # Routers are added here as each batch is built:
