@@ -83,4 +83,3 @@ async def submit_tiebreak_route(room_id: str, body: SubmitTieBreakRequest, auth=
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return outcome
-  
