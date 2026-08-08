@@ -6,9 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import init_db
+from app.database import init_db, AsyncSessionLocal
 from app.cache import ping_redis
 from app.bot import build_bot_application
+from app.seed import seed_games
+from app.routes import auth, games, rooms
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nexus_duos")
@@ -20,6 +22,11 @@ bot_app = build_bot_application()
 async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database ready")
+
+    async with AsyncSessionLocal() as db:
+        await seed_games(db)
+    logger.info("Games catalog seeded")
+
     redis_ok = await ping_redis()
     logger.info("🔴 Redis connected" if redis_ok else "⚠️ Redis connection FAILED — check REDIS_URL")
 
@@ -53,8 +60,9 @@ async def health():
     return {"status": "ok", "redis": "connected" if redis_ok else "disconnected"}
 
 
-# Routers are added here as each batch is built:
-# from app.routes import auth, profile, rooms, games, history, settings as settings_route, match
-# app.include_router(auth.router, prefix="/auth", tags=["auth"])
-# app.include_router(profile.router, prefix="/profile", tags=["profile"])
-# ... etc
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(games.router, prefix="/games", tags=["games"])
+app.include_router(rooms.router, prefix="/rooms", tags=["rooms"])
+
+# Routers still to come in later batches:
+# from app.routes import profile, history, settings as settings_route, match
