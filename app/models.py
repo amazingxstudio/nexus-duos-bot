@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Integer, BigInteger, Boolean, DateTime, ForeignKey, Enum, func
+from sqlalchemy import String, Integer, BigInteger, Boolean, DateTime, ForeignKey, Enum, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -122,6 +122,18 @@ class Room(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GameVote(Base):
+    __tablename__ = "game_votes"
+    __table_args__ = (UniqueConstraint("room_id", "user_id", "round", name="uq_game_vote_room_user_round"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_id)
+    room_id: Mapped[str] = mapped_column(String, ForeignKey("rooms.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
+    game_id: Mapped[str] = mapped_column(String, ForeignKey("games.id"))
+    round: Mapped[int] = mapped_column(Integer, default=1)  # supports multi-round tie-break voting
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Match(Base):
