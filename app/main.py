@@ -1,7 +1,7 @@
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,6 +11,8 @@ from app.cache import ping_redis
 from app.bot import build_bot_application
 from app.seed import seed_games
 from app.routes import auth, games, rooms
+from app.socketio_app import sio
+import app.sockets  # noqa: F401 — imported for its side effect of registering @sio.on handlers
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nexus_duos")
@@ -19,7 +21,7 @@ bot_app = build_bot_application()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_fastapi_app: FastAPI):
     await init_db()
     logger.info("Database ready")
 
@@ -43,9 +45,9 @@ async def lifespan(app: FastAPI):
     await bot_app.shutdown()
 
 
-app = FastAPI(title="Nexus Duos API", lifespan=lifespan)
+fastapi_app = FastAPI(title="Nexus Duos API", lifespan=lifespan)
 
-app.add_middleware(
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
@@ -54,15 +56,20 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
+@fastapi_app.get("/health")
 async def health():
     redis_ok = await ping_redis()
     return {"status": "ok", "redis": "connected" if redis_ok else "disconnected"}
 
 
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(games.router, prefix="/games", tags=["games"])
-app.include_router(rooms.router, prefix="/rooms", tags=["rooms"])
+fastapi_app.include_router(auth.router, prefix="/auth", tags=["auth"])
+fastapi_app.include_router(games.router, prefix="/games", tags=["games"])
+fastapi_app.include_router(rooms.router, prefix="/rooms", tags=["rooms"])
 
 # Routers still to come in later batches:
 # from app.routes import profile, history, settings as settings_route, match
+
+# Wrap the FastAPI app with the Socket.IO ASGI app. Everything that isn't a
+# /socket.io/ request passes straight through to FastAPI unchanged — so
+# /health, /docs, /auth, /games, /rooms all keep working exactly as before.
+app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path="socket.io")
