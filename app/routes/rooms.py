@@ -7,6 +7,7 @@ from app.dependencies import require_auth
 from app.models import Room, User, Profile, Game
 from app.schemas import JoinRoomRequest, SubmitPicksRequest, SubmitTieBreakRequest
 from app.matchmaking import create_room, join_room, submit_vote_picks, submit_tie_break_vote
+from app.socketio_app import sio
 
 router = APIRouter()
 
@@ -55,7 +56,10 @@ async def join_room_route(body: JoinRoomRequest, auth=Depends(require_auth), db:
         room = await join_room(db, body.code.strip().upper(), auth["user_id"])
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"room": await _room_response(db, room)}
+
+    room_out = await _room_response(db, room)
+    await sio.emit("room_joined", {"room": room_out}, room=f"room:{room.code}")
+    return {"room": room_out}
 
 
 @router.get("/{code}")
@@ -73,6 +77,20 @@ async def submit_picks_route(room_id: str, body: SubmitPicksRequest, auth=Depend
         outcome = await submit_vote_picks(db, room_id, auth["user_id"], body.picks)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    room = await db.get(Room, room_id)
+    if room:
+        if outcome.get("waiting"):
+            await sio.emit("vote:player_submitted", {"user_id": auth["user_id"]}, room=f"room:{room.code}")
+        elif outcome.get("resolved"):
+            await sio.emit(
+                "vote:resolved",
+                {"game_key": outcome["game_key"], "game_name": outcome["game_name"], "match_id": outcome["match_id"]},
+                room=f"room:{room.code}",
+            )
+        else:
+            await sio.emit("vote:tiebreak_required", {"candidates": outcome["candidates"]}, room=f"room:{room.code}")
+
     return outcome
 
 
@@ -82,4 +100,16 @@ async def submit_tiebreak_route(room_id: str, body: SubmitTieBreakRequest, auth=
         outcome = await submit_tie_break_vote(db, room_id, auth["user_id"], body.game_key)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    room = await db.get(Room, room_id)
+    if room:
+        if outcome.get("waiting"):
+            await sio.emit("vote:player_submitted", {"user_id": auth["user_id"]}, room=f"room:{room.code}")
+        else:
+            await sio.emit(
+                "vote:resolved",
+                {"game_key": outcome["game_key"], "game_name": outcome["game_name"], "match_id": outcome["match_id"]},
+                room=f"room:{room.code}",
+            )
+
     return outcome
