@@ -2,12 +2,22 @@ from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
 from app.games.cyber_duel.engine import CyberDuelEngine
 from app.games.speed_typing.engine import SpeedTypingEngine
+from app.games.code_breaker.engine import CodeBreakerEngine
+from app.games.memory_warfare.engine import MemoryWarfareEngine
+from app.games.puzzle_arena.engine import PuzzleArenaEngine
+from app.games.tower_control.engine import TowerControlEngine
+from app.games.neon_chess.engine import NeonChessEngine
+from app.games.arena_cards.engine import ArenaCardsEngine
 
-# TODO(Batch 5+): NEON_CHESS, CODE_BREAKER, ARENA_CARDS, MEMORY_WARFARE,
-# TOWER_CONTROL, PUZZLE_ARENA — register each here as it's built.
 _registry: dict[GameKey, BaseGameEngine] = {
     GameKey.CYBER_DUEL: CyberDuelEngine(),
     GameKey.SPEED_TYPING: SpeedTypingEngine(),
+    GameKey.CODE_BREAKER: CodeBreakerEngine(),
+    GameKey.MEMORY_WARFARE: MemoryWarfareEngine(),
+    GameKey.PUZZLE_ARENA: PuzzleArenaEngine(),
+    GameKey.TOWER_CONTROL: TowerControlEngine(),
+    GameKey.NEON_CHESS: NeonChessEngine(),
+    GameKey.ARENA_CARDS: ArenaCardsEngine(),
 }
 
 
