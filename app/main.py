@@ -10,7 +10,7 @@ from app.database import init_db, AsyncSessionLocal
 from app.cache import ping_redis
 from app.bot import build_bot_application
 from app.seed import seed_games
-from app.routes import auth, games, rooms
+from app.routes import auth, games, rooms, profile, history, settings as settings_route
 from app.socketio_app import sio
 import app.sockets  # noqa: F401 — imported for its side effect of registering @sio.on handlers
 
@@ -65,6 +65,9 @@ async def health():
 fastapi_app.include_router(auth.router, prefix="/auth", tags=["auth"])
 fastapi_app.include_router(games.router, prefix="/games", tags=["games"])
 fastapi_app.include_router(rooms.router, prefix="/rooms", tags=["rooms"])
+fastapi_app.include_router(profile.router, prefix="/profile", tags=["profile"])
+fastapi_app.include_router(history.router, prefix="/history", tags=["history"])
+fastapi_app.include_router(settings_route.router, prefix="/settings", tags=["settings"])
 
 # Routers still to come in later batches:
 # from app.routes import profile, history, settings as settings_route, match
