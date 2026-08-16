@@ -7,9 +7,10 @@ from app.socketio_app import sio
 from app.security import verify_session_token
 from app.cache import set_user_online, set_user_offline
 from app.database import AsyncSessionLocal
-from app.models import Room, Match, Game, RoomStatus
+from app.models import Room, Match, Game, RoomStatus, Profile, Friend, User
 from app.games.engine.registry import get_game_engine
 from app.games.engine.match_runner import start_match, handle_game_action, handle_player_disconnect
+from app.matchmaking import create_room, join_room
 
 logger = logging.getLogger("nexus_duos.sockets")
 
@@ -29,6 +30,7 @@ async def connect(sid, environ, auth):
     await set_user_online(user_id, sid)
     await sio.enter_room(sid, f"user:{user_id}")
     logger.info("socket connected user_id=%s sid=%s", user_id, sid)
+    await _notify_friends_of_status(user_id, True)
 
 
 @sio.on("disconnect")
@@ -40,6 +42,7 @@ async def disconnect(sid):
 
     await set_user_offline(user_id)
     logger.info("socket disconnected user_id=%s", user_id)
+    await _notify_friends_of_status(user_id, False)
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -130,3 +133,61 @@ async def game_action(sid, data):
         return
 
     await handle_game_action(engine, match_id, user_id, action_type, action_data)
+
+
+# ---- Presence broadcast to friends -------------------------------------
+
+async def _notify_friends_of_status(user_id: str, online: bool):
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Friend).where(Friend.friend_id == user_id))
+        watchers = result.scalars().all()
+    for w in watchers:
+        await sio.emit("friend_status_changed", {"user_id": user_id, "online": online}, room=f"user:{w.user_id}")
+
+
+# ---- Duel invites (friend list "Invite to Duel") ------------------------
+
+@sio.on("invite:send")
+async def invite_send(sid, data):
+    session = await sio.get_session(sid)
+    from_user_id = session["user_id"]
+    to_user_id = (data or {}).get("to_user_id")
+    if not to_user_id:
+        return
+
+    async with AsyncSessionLocal() as db:
+        profile = (await db.execute(select(Profile).where(Profile.user_id == from_user_id))).scalar_one_or_none()
+        if not profile:
+            return
+        await sio.emit(
+            "invite:received",
+            {"from_user_id": from_user_id, "from_nickname": profile.nickname, "from_player_id": profile.player_id},
+            room=f"user:{to_user_id}",
+        )
+
+
+@sio.on("invite:accept")
+async def invite_accept(sid, data):
+    session = await sio.get_session(sid)
+    accepter_id = session["user_id"]
+    from_user_id = (data or {}).get("from_user_id")
+    if not from_user_id:
+        return
+
+    async with AsyncSessionLocal() as db:
+        room = await create_room(db, from_user_id)
+        room, match = await join_room(db, room.code, accepter_id)
+
+    payload = {"room_code": room.code}
+    await sio.emit("invite:accepted", payload, room=f"user:{from_user_id}")
+    await sio.emit("invite:accepted", payload, room=f"user:{accepter_id}")
+
+
+@sio.on("invite:decline")
+async def invite_decline(sid, data):
+    session = await sio.get_session(sid)
+    decliner_id = session["user_id"]
+    from_user_id = (data or {}).get("from_user_id")
+    if not from_user_id:
+        return
+    await sio.emit("invite:declined", {"by_user_id": decliner_id}, room=f"user:{from_user_id}")
