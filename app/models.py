@@ -116,6 +116,9 @@ class Room(Base):
     player1_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
     player2_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     game_id: Mapped[str | None] = mapped_column(String, ForeignKey("games.id"), nullable=True)
+    # Set when a room is created via "quick duel" (tap a game on Home) —
+    # skips the 3-pick voting flow entirely once player2 joins.
+    preset_game_key: Mapped[GameKey | None] = mapped_column(Enum(GameKey), nullable=True)
 
     status: Mapped[RoomStatus] = mapped_column(Enum(RoomStatus), default=RoomStatus.WAITING_FOR_PLAYER)
 
@@ -132,7 +135,17 @@ class GameVote(Base):
     room_id: Mapped[str] = mapped_column(String, ForeignKey("rooms.id", ondelete="CASCADE"))
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
     game_id: Mapped[str] = mapped_column(String, ForeignKey("games.id"))
-    round: Mapped[int] = mapped_column(Integer, default=1)  # supports multi-round tie-break voting
+    round: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Friend(Base):
+    __tablename__ = "friends"
+    __table_args__ = (UniqueConstraint("user_id", "friend_id", name="uq_friend_pair"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"))
+    friend_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
