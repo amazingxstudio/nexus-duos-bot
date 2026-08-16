@@ -1,23 +1,28 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_auth
-from app.models import Room, User, Profile, Game
+from app.models import Room, User, Profile, Game, Match
 from app.schemas import JoinRoomRequest, SubmitPicksRequest, SubmitTieBreakRequest
 from app.matchmaking import create_room, join_room, submit_vote_picks, submit_tie_break_vote
 from app.socketio_app import sio
+from app.bot import send_telegram_message
 
 router = APIRouter()
+
+
+class QuickDuelRequest(BaseModel):
+    game_key: str
 
 
 def _player_out(user: User | None, profile: Profile | None):
     if not user:
         return None
     return {
-        "id": user.id,
-        "photo_url": user.photo_url,
+        "id": user.id, "photo_url": user.photo_url,
         "nickname": profile.nickname if profile else None,
         "player_id": profile.player_id if profile else None,
     }
@@ -26,39 +31,62 @@ def _player_out(user: User | None, profile: Profile | None):
 async def _room_response(db: AsyncSession, room: Room) -> dict:
     p1 = await db.get(User, room.player1_id)
     p1_profile = (await db.execute(select(Profile).where(Profile.user_id == room.player1_id))).scalar_one_or_none()
-
     p2 = await db.get(User, room.player2_id) if room.player2_id else None
     p2_profile = None
     if room.player2_id:
         p2_profile = (await db.execute(select(Profile).where(Profile.user_id == room.player2_id))).scalar_one_or_none()
-
     game = await db.get(Game, room.game_id) if room.game_id else None
 
+    match_result = await db.execute(select(Match).where(Match.room_id == room.id))
+    match = match_result.scalar_one_or_none()
+
     return {
-        "id": room.id,
-        "code": room.code,
-        "status": room.status.value,
+        "id": room.id, "code": room.code, "status": room.status.value,
         "player1": _player_out(p1, p1_profile),
         "player2": _player_out(p2, p2_profile),
         "game": {"key": game.key.value, "name": game.name} if game else None,
+        "match_id": match.id if match else None,
     }
 
 
 @router.post("")
 async def create_room_route(auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
     room = await create_room(db, auth["user_id"])
+    await send_telegram_message(
+        int(auth["telegram_id"]),
+        f"🎮 Room created: {room.code}\n\nShare this code with a friend so they can join you in Nexus Duos.",
+    )
+    return {"room": await _room_response(db, room)}
+
+
+@router.post("/quick")
+async def quick_duel_route(body: QuickDuelRequest, auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
+    """Tap-a-game-on-Home flow: creates a room pre-locked to one game — no voting once player2 joins."""
+    room = await create_room(db, auth["user_id"], preset_game_key=body.game_key)
+    await send_telegram_message(
+        int(auth["telegram_id"]),
+        f"🎮 Room created: {room.code}\n\nShare this code with a friend so they can join you in Nexus Duos.",
+    )
     return {"room": await _room_response(db, room)}
 
 
 @router.post("/join")
 async def join_room_route(body: JoinRoomRequest, auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
     try:
-        room = await join_room(db, body.code.strip().upper(), auth["user_id"])
+        room, match = await join_room(db, body.code.strip().upper(), auth["user_id"])
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     room_out = await _room_response(db, room)
     await sio.emit("room_joined", {"room": room_out}, room=f"room:{room.code}")
+
+    if match:
+        game = await db.get(Game, room.game_id)
+        await sio.emit(
+            "vote:resolved",
+            {"game_key": game.key.value, "game_name": game.name, "match_id": match.id},
+            room=f"room:{room.code}",
+        )
     return {"room": room_out}
 
 
@@ -83,14 +111,9 @@ async def submit_picks_route(room_id: str, body: SubmitPicksRequest, auth=Depend
         if outcome.get("waiting"):
             await sio.emit("vote:player_submitted", {"user_id": auth["user_id"]}, room=f"room:{room.code}")
         elif outcome.get("resolved"):
-            await sio.emit(
-                "vote:resolved",
-                {"game_key": outcome["game_key"], "game_name": outcome["game_name"], "match_id": outcome["match_id"]},
-                room=f"room:{room.code}",
-            )
+            await sio.emit("vote:resolved", {"game_key": outcome["game_key"], "game_name": outcome["game_name"], "match_id": outcome["match_id"]}, room=f"room:{room.code}")
         else:
             await sio.emit("vote:tiebreak_required", {"candidates": outcome["candidates"]}, room=f"room:{room.code}")
-
     return outcome
 
 
@@ -106,10 +129,5 @@ async def submit_tiebreak_route(room_id: str, body: SubmitTieBreakRequest, auth=
         if outcome.get("waiting"):
             await sio.emit("vote:player_submitted", {"user_id": auth["user_id"]}, room=f"room:{room.code}")
         else:
-            await sio.emit(
-                "vote:resolved",
-                {"game_key": outcome["game_key"], "game_name": outcome["game_name"], "match_id": outcome["match_id"]},
-                room=f"room:{room.code}",
-            )
-
+            await sio.emit("vote:resolved", {"game_key": outcome["game_key"], "game_name": outcome["game_name"], "match_id": outcome["match_id"]}, room=f"room:{room.code}")
     return outcome
