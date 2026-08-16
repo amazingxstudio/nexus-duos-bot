@@ -2,6 +2,7 @@ import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.error import TelegramError
 
 from sqlalchemy import select
 
@@ -11,6 +12,11 @@ from app.models import User, Profile, UserSettings
 from app.room_code import generate_player_id
 
 logger = logging.getLogger("nexus_duos.bot")
+
+# Module-level singleton — created once, imported everywhere. Building a
+# second Application elsewhere would start a second polling loop and cause
+# Telegram's "409 Conflict: terminated by other getUpdates request" error.
+bot_application: Application = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
 
 
 async def bootstrap_user_profile(tg_user) -> None:
@@ -32,7 +38,7 @@ async def bootstrap_user_profile(tg_user) -> None:
                 language_code=tg_user.language_code,
             )
             db.add(user)
-            await db.flush()  # get user.id before creating child rows
+            await db.flush()
 
             db.add(Profile(user_id=user.id, nickname=tg_user.username or tg_user.first_name, player_id=generate_player_id()))
             db.add(UserSettings(user_id=user.id))
@@ -59,7 +65,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 
+bot_application.add_handler(CommandHandler("start", start_command))
+
+
 def build_bot_application() -> Application:
-    application = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start_command))
-    return application
+    """Kept for backward compatibility — returns the same singleton."""
+    return bot_application
+
+
+async def send_telegram_message(telegram_id: int, text: str) -> None:
+    """Lets the web app (REST routes, sockets) push a DM through the bot —
+    e.g. sending a freshly-created room code back to its creator."""
+    try:
+        await bot_application.bot.send_message(chat_id=telegram_id, text=text)
+    except TelegramError:
+        logger.exception("Failed to send Telegram message to %s", telegram_id)
