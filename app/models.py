@@ -129,7 +129,15 @@ class Room(Base):
 
 class GameVote(Base):
     __tablename__ = "game_votes"
-    __table_args__ = (UniqueConstraint("room_id", "user_id", "round", name="uq_game_vote_room_user_round"),)
+    # One row per (room, user, round, game) — each player casts 3 picks per
+    # round (one row per game), so the constraint must include game_id.
+    # It previously omitted game_id, which meant a player's 2nd and 3rd pick
+    # in the same round both collided with their 1st on (room_id, user_id,
+    # round) alone — every real 3-pick submission hit this constraint and
+    # failed, which the frontend then showed as an endless "Waiting for
+    # opponent..." with no visible error. See database.py's schema-sync for
+    # the live-database migration that corrects this on existing deployments.
+    __table_args__ = (UniqueConstraint("room_id", "user_id", "round", "game_id", name="uq_game_vote_room_user_round_game"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_id)
     room_id: Mapped[str] = mapped_column(String, ForeignKey("rooms.id", ondelete="CASCADE"))
