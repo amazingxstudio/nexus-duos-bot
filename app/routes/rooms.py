@@ -54,7 +54,8 @@ async def create_room_route(auth=Depends(require_auth), db: AsyncSession = Depen
     room = await create_room(db, auth["user_id"])
     await send_telegram_message(
         int(auth["telegram_id"]),
-        f"🎮 Room created: {room.code}\n\nShare this code with a friend so they can join you in Nexus Duos.",
+        f"🎮 Room created: <code>{room.code}</code>\n\nTap the code to copy it, then share it with a friend so they can join you in Nexus Duos.",
+        parse_mode="HTML",
     )
     return {"room": await _room_response(db, room)}
 
@@ -65,7 +66,8 @@ async def quick_duel_route(body: QuickDuelRequest, auth=Depends(require_auth), d
     room = await create_room(db, auth["user_id"], preset_game_key=body.game_key)
     await send_telegram_message(
         int(auth["telegram_id"]),
-        f"🎮 Room created: {room.code}\n\nShare this code with a friend so they can join you in Nexus Duos.",
+        f"🎮 Room created: <code>{room.code}</code>\n\nTap the code to copy it, then share it with a friend so they can join you in Nexus Duos.",
+        parse_mode="HTML",
     )
     return {"room": await _room_response(db, room)}
 
