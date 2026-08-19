@@ -60,16 +60,59 @@ def _sync_missing_columns(sync_conn) -> None:
                 logger.exception("Schema sync: failed to add column %s.%s", table.name, column.name)
 
 
+def _fix_game_vote_constraint(sync_conn) -> None:
+    """One-off, idempotent repair for a wrong UNIQUE constraint.
+
+    game_votes originally had UNIQUE(room_id, user_id, round) — but each
+    round is 3 rows per user (one per pick), so that constraint rejected
+    every real submission on its 2nd row with an IntegrityError. The route
+    swallowed that as "ALREADY_VOTED", and the frontend had no error
+    handling on that call, so players just saw "Waiting for opponent..."
+    forever. The model now declares the correct
+    UNIQUE(room_id, user_id, round, game_id); this brings an existing
+    database's constraint in line with it. Safe to run on every boot —
+    it's a no-op once the correct constraint is in place.
+    """
+    inspector = inspect(sync_conn)
+    if "game_votes" not in inspector.get_table_names():
+        return
+
+    constraints = inspector.get_unique_constraints("game_votes")
+    wanted = {"room_id", "user_id", "round", "game_id"}
+
+    if any(set(c.get("column_names") or []) == wanted for c in constraints):
+        return  # already correct
+
+    for c in constraints:
+        if set(c.get("column_names") or []) == {"room_id", "user_id", "round"}:
+            try:
+                sync_conn.execute(text(f'ALTER TABLE "game_votes" DROP CONSTRAINT "{c["name"]}"'))
+                logger.warning("Schema fix: dropped incorrect constraint %s on game_votes", c["name"])
+            except Exception:
+                logger.exception("Schema fix: failed to drop constraint %s", c["name"])
+
+    try:
+        sync_conn.execute(text(
+            'ALTER TABLE "game_votes" ADD CONSTRAINT "uq_game_vote_room_user_round_game" '
+            'UNIQUE (room_id, user_id, round, game_id)'
+        ))
+        logger.warning("Schema fix: added corrected unique constraint on game_votes")
+    except Exception:
+        logger.exception("Schema fix: failed to add corrected constraint on game_votes")
+
+
 async def init_db():
     """Creates any tables that don't exist yet, then additively syncs any
-    columns a model declares that the live table is missing (see
-    _sync_missing_columns). Switch to Alembic migrations once the schema
-    stabilizes."""
+    columns a model declares that the live table is missing, then applies
+    the one-off game_votes constraint repair. Switch to Alembic migrations
+    once the schema stabilizes."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         try:
             await conn.run_sync(_sync_missing_columns)
         except Exception:
-            # Never let a schema-sync hiccup take the whole API down — the
-            # tables from create_all() above are still usable.
             logger.exception("Schema sync failed — continuing with existing schema")
+        try:
+            await conn.run_sync(_fix_game_vote_constraint)
+        except Exception:
+            logger.exception("game_votes constraint fix failed — continuing with existing schema")
