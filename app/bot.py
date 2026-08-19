@@ -73,10 +73,15 @@ def build_bot_application() -> Application:
     return bot_application
 
 
-async def send_telegram_message(telegram_id: int, text: str) -> None:
+async def send_telegram_message(telegram_id: int, text: str, parse_mode: str | None = None) -> None:
     """Lets the web app (REST routes, sockets) push a DM through the bot —
-    e.g. sending a freshly-created room code back to its creator."""
+    e.g. sending a freshly-created room code back to its creator.
+
+    parse_mode="HTML" lets the caller wrap part of the text in <code>...</code>
+    so Telegram renders it as a monospace, tap-to-copy span (tapping/holding a
+    <code> span in Telegram shows "Copy" for just that text, rather than the
+    whole message)."""
     try:
-        await bot_application.bot.send_message(chat_id=telegram_id, text=text)
+        await bot_application.bot.send_message(chat_id=telegram_id, text=text, parse_mode=parse_mode)
     except TelegramError:
         logger.exception("Failed to send Telegram message to %s", telegram_id)
