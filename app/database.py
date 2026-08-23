@@ -101,11 +101,47 @@ def _fix_game_vote_constraint(sync_conn) -> None:
         logger.exception("Schema fix: failed to add corrected constraint on game_votes")
 
 
+def _rename_enum_values(sync_conn) -> None:
+    """One-off, idempotent renames for gamekey enum values, used when a
+    mini-game is swapped out for a new one under the same GameKey slot.
+    Safe to run on every boot: a pair is only renamed if the old label is
+    still present in the live type and the new one isn't yet — so this is
+    a no-op on a fresh database (create_all() already made the type with
+    only the new names) and a no-op again on every boot after it's applied
+    once. ALTER TYPE ... RENAME VALUE is transaction-safe in Postgres, so
+    this can run inside the same transaction as everything else here.
+
+    Add a tuple here each time GameKey renames a value in models.py.
+    """
+    renames = [
+        ("ARENA_CARDS", "CONNECT_FOUR"),
+        ("CYBER_DUEL", "DOTS_AND_BOXES"),
+    ]
+    for old, new_name in renames:
+        try:
+            old_exists = sync_conn.execute(text(
+                "SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid "
+                "WHERE t.typname = 'gamekey' AND e.enumlabel = :old"
+            ), {"old": old}).first()
+            if not old_exists:
+                continue
+            new_exists = sync_conn.execute(text(
+                "SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid "
+                "WHERE t.typname = 'gamekey' AND e.enumlabel = :new"
+            ), {"new": new_name}).first()
+            if new_exists:
+                continue
+            sync_conn.execute(text(f"ALTER TYPE gamekey RENAME VALUE '{old}' TO '{new_name}'"))
+            logger.warning("Schema fix: renamed gamekey enum value %s -> %s", old, new_name)
+        except Exception:
+            logger.exception("Schema fix: failed to rename gamekey enum value %s -> %s", old, new_name)
+
+
 async def init_db():
     """Creates any tables that don't exist yet, then additively syncs any
     columns a model declares that the live table is missing, then applies
-    the one-off game_votes constraint repair. Switch to Alembic migrations
-    once the schema stabilizes."""
+    the one-off game_votes constraint repair and any pending gamekey enum
+    renames. Switch to Alembic migrations once the schema stabilizes."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         try:
@@ -116,3 +152,7 @@ async def init_db():
             await conn.run_sync(_fix_game_vote_constraint)
         except Exception:
             logger.exception("game_votes constraint fix failed — continuing with existing schema")
+        try:
+            await conn.run_sync(_rename_enum_values)
+        except Exception:
+            logger.exception("gamekey enum rename failed — continuing with existing schema")
