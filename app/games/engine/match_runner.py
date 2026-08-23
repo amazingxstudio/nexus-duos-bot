@@ -9,6 +9,7 @@ from app.database import AsyncSessionLocal
 from app.models import Match, Profile, MatchResult, MatchMode, Room, RoomStatus
 from app.socketio_app import sio
 from app.games.engine.utils import now_ms
+from app.history_cleanup import prune_old_matches
 
 logger = logging.getLogger("nexus_duos.engine")
 
@@ -133,6 +134,13 @@ async def finish_match(engine, match_id: str) -> None:
                     room.finished_at = datetime.now(timezone.utc)
 
             await db.commit()
+
+            # Keep each participant's history capped at the most recent
+            # HISTORY_LIMIT matches — see history_cleanup.py for why a row
+            # is only actually deleted once neither player needs it anymore.
+            await prune_old_matches(db, p1_id)
+            if p2_id:
+                await prune_old_matches(db, p2_id)
 
     await delete_match_state(match_id)
 
