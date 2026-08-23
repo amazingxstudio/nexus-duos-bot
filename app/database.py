@@ -102,20 +102,26 @@ def _fix_game_vote_constraint(sync_conn) -> None:
 
 
 def _rename_enum_values(sync_conn) -> None:
-    """One-off, idempotent renames for gamekey enum values, used when a
-    mini-game is swapped out for a new one under the same GameKey slot.
-    Safe to run on every boot: a pair is only renamed if the old label is
-    still present in the live type and the new one isn't yet — so this is
-    a no-op on a fresh database (create_all() already made the type with
-    only the new names) and a no-op again on every boot after it's applied
-    once. ALTER TYPE ... RENAME VALUE is transaction-safe in Postgres, so
-    this can run inside the same transaction as everything else here.
-
-    Add a tuple here each time GameKey renames a value in models.py.
+    """One-off, idempotent renames for all 8 gamekey enum values — the
+    entire original mini-game lineup is being swapped out for a new one,
+    in batches, but the *rename list* is final and complete from day one so
+    this function never needs editing again. Safe to run on every boot: a
+    pair is only renamed if the old label is still present in the live type
+    and the new one isn't yet — a no-op on a fresh database (create_all()
+    already makes the type with only the new names) and a no-op again on
+    every boot after it's applied once. ALTER TYPE ... RENAME VALUE is
+    transaction-safe in Postgres, so this runs inside the same transaction
+    as everything else here.
     """
     renames = [
         ("ARENA_CARDS", "CONNECT_FOUR"),
         ("CYBER_DUEL", "DOTS_AND_BOXES"),
+        ("TOWER_CONTROL", "QUICK_MATH"),
+        ("SPEED_TYPING", "TYPING_RACE"),
+        ("CODE_BREAKER", "GUESS_THE_WORD"),
+        ("MEMORY_WARFARE", "MEMORY_RACE"),
+        ("NEON_CHESS", "FIND_THE_DIFFERENT"),
+        ("PUZZLE_ARENA", "WORD_CHAIN"),
     ]
     for old, new_name in renames:
         try:
