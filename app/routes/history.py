@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import require_auth
 from app.models import Match, Profile, UserSettings, Game
+from app.history_cleanup import HISTORY_LIMIT
 
 router = APIRouter()
 
@@ -22,18 +23,18 @@ async def get_player_history(player_id: str, auth=Depends(require_auth), db: Asy
     target_user_id = profile.user_id
     settings = (await db.execute(select(UserSettings).where(UserSettings.user_id == target_user_id))).scalar_one_or_none()
     show_all = settings.show_history_to_all if settings else True
-    matches = await _fetch_matches(db, target_user_id)
     if not show_all:
-        viewer_id = auth["user_id"]
-        matches = [m for m in matches if viewer_id in (m.player1_id, m.player2_id)]
-    return {"matches": [await _serialize_match(db, m, target_user_id) for m in matches]}
+        # Private means private — no partial/shared-match exception.
+        return {"matches": [], "hidden": True}
+    matches = await _fetch_matches(db, target_user_id)
+    return {"matches": [await _serialize_match(db, m, target_user_id) for m in matches], "hidden": False}
 
 
-async def _fetch_matches(db, user_id):
+async def _fetch_matches(db, user_id, limit: int = HISTORY_LIMIT):
     result = await db.execute(
         select(Match).where(Match.finished_at.is_not(None))
         .where(or_(Match.player1_id == user_id, Match.player2_id == user_id))
-        .order_by(Match.finished_at.desc()).limit(50)
+        .order_by(Match.finished_at.desc()).limit(limit)
     )
     return list(result.scalars().all())
 
