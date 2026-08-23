@@ -33,10 +33,15 @@ class MatchMode(str, enum.Enum):
 
 
 class GameKey(str, enum.Enum):
-    CYBER_DUEL = "CYBER_DUEL"
+    # The original 8 mini-games are being swapped out for a new lineup, one
+    # or two at a time (see database.py's _rename_enum_values for the live
+    # migration). Renamed so far: ARENA_CARDS -> CONNECT_FOUR,
+    # CYBER_DUEL -> DOTS_AND_BOXES. Still pending: NEON_CHESS, CODE_BREAKER,
+    # MEMORY_WARFARE, SPEED_TYPING, TOWER_CONTROL, PUZZLE_ARENA.
+    DOTS_AND_BOXES = "DOTS_AND_BOXES"
     NEON_CHESS = "NEON_CHESS"
     CODE_BREAKER = "CODE_BREAKER"
-    ARENA_CARDS = "ARENA_CARDS"
+    CONNECT_FOUR = "CONNECT_FOUR"
     MEMORY_WARFARE = "MEMORY_WARFARE"
     SPEED_TYPING = "SPEED_TYPING"
     TOWER_CONTROL = "TOWER_CONTROL"
