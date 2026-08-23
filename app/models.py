@@ -33,19 +33,23 @@ class MatchMode(str, enum.Enum):
 
 
 class GameKey(str, enum.Enum):
-    # The original 8 mini-games are being swapped out for a new lineup, one
-    # or two at a time (see database.py's _rename_enum_values for the live
-    # migration). Renamed so far: ARENA_CARDS -> CONNECT_FOUR,
-    # CYBER_DUEL -> DOTS_AND_BOXES. Still pending: NEON_CHESS, CODE_BREAKER,
-    # MEMORY_WARFARE, SPEED_TYPING, TOWER_CONTROL, PUZZLE_ARENA.
-    DOTS_AND_BOXES = "DOTS_AND_BOXES"
-    NEON_CHESS = "NEON_CHESS"
-    CODE_BREAKER = "CODE_BREAKER"
+    """The permanent, final key for each of the 8 mini-games. Every shared
+    file (this enum, database.py's migration, seed.py, the engine registry,
+    the frontend dispatcher) is wired for all 8 of these from day one — a
+    game not being built yet just means its engine.py / *Game.tsx is a
+    small "coming soon" placeholder for now (see
+    app/games/engine/registry.py and the frontend's GameDispatcher.tsx).
+    Building a game later only ever means replacing that one game's two
+    files — nothing shared changes.
+    """
     CONNECT_FOUR = "CONNECT_FOUR"
-    MEMORY_WARFARE = "MEMORY_WARFARE"
-    SPEED_TYPING = "SPEED_TYPING"
-    TOWER_CONTROL = "TOWER_CONTROL"
-    PUZZLE_ARENA = "PUZZLE_ARENA"
+    DOTS_AND_BOXES = "DOTS_AND_BOXES"
+    QUICK_MATH = "QUICK_MATH"
+    TYPING_RACE = "TYPING_RACE"
+    GUESS_THE_WORD = "GUESS_THE_WORD"
+    MEMORY_RACE = "MEMORY_RACE"
+    FIND_THE_DIFFERENT = "FIND_THE_DIFFERENT"
+    WORD_CHAIN = "WORD_CHAIN"
 
 
 class User(Base):
