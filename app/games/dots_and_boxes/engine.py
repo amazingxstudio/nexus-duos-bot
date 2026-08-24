@@ -3,10 +3,10 @@ import random
 from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
 
-DOTS = 5  # 5x5 dots -> 4x4 = 16 boxes: enough depth without running too long on mobile
+DOTS = 9  # 9x9 dots -> 8x8 = 64 boxes (doubled from the original 5x5/16-box grid)
 BOX_ROWS = DOTS - 1
 BOX_COLS = DOTS - 1
-MATCH_DURATION_MS = 6 * 60_000  # safety cap — the real end condition is "all boxes filled"
+MATCH_DURATION_MS = 8 * 60_000  # safety cap — the real end condition is "all boxes filled"; bumped up a bit since the bigger grid takes longer to fill
 
 
 class DotsAndBoxesEngine(BaseGameEngine):
