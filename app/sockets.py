@@ -7,8 +7,8 @@ from app.socketio_app import sio
 from app.security import verify_session_token
 from app.cache import set_user_online, set_user_offline
 from app.database import AsyncSessionLocal
-from app.models import Room, Match, Game, RoomStatus, Profile, Friend, User
-from app.games.engine.registry import get_game_engine
+from app.models import Room, Match, Game, GameKey, RoomStatus, Profile, Friend, User
+from app.games.engine.registry import get_game_engine, is_game_implemented
 from app.games.engine.match_runner import start_match, handle_game_action, handle_player_disconnect
 from app.matchmaking import create_room, join_room
 
@@ -145,7 +145,33 @@ async def _notify_friends_of_status(user_id: str, online: bool):
         await sio.emit("friend_status_changed", {"user_id": user_id, "online": online}, room=f"user:{w.user_id}")
 
 
-# ---- Duel invites (friend list "Invite to Duel") ------------------------
+# ---- Duel invites (friend list "Invite to Duel" + post-match "Duel Again") --
+#
+# An invite optionally carries a preset game_key: the inviter picked a
+# specific game (or the "Duel Again" rematch reuses the game just played)
+# instead of leaving it to the usual Voting phase. None means Voting, same
+# as an invite always used to behave. The key travels with the invite
+# payload and the accepter's client echoes it straight back on accept —
+# no extra server-side state needed — and both ends re-validate it against
+# the real game registry before trusting it, so a stale/unknown key just
+# quietly falls back to Voting instead of failing the invite.
+
+async def _valid_game_key(db, game_key: str | None):
+    """Returns (key, name) for an implemented game, or (None, None) for
+    anything missing/unknown/not-yet-built — the safe fallback is Voting."""
+    if not game_key:
+        return None, None
+    try:
+        key_enum = GameKey(game_key)
+    except ValueError:
+        return None, None
+    if not is_game_implemented(key_enum):
+        return None, None
+    game = (await db.execute(select(Game).where(Game.key == key_enum))).scalar_one_or_none()
+    if not game:
+        return None, None
+    return key_enum.value, game.name
+
 
 @sio.on("invite:send")
 async def invite_send(sid, data):
@@ -159,9 +185,17 @@ async def invite_send(sid, data):
         profile = (await db.execute(select(Profile).where(Profile.user_id == from_user_id))).scalar_one_or_none()
         if not profile:
             return
+        game_key, game_name = await _valid_game_key(db, (data or {}).get("game_key"))
         await sio.emit(
             "invite:received",
-            {"from_user_id": from_user_id, "from_nickname": profile.nickname, "from_player_id": profile.player_id},
+            {
+                "from_user_id": from_user_id,
+                "from_nickname": profile.nickname,
+                "from_player_id": profile.player_id,
+                "game_key": game_key,
+                "game_name": game_name,
+                "is_rematch": bool((data or {}).get("is_rematch")),
+            },
             room=f"user:{to_user_id}",
         )
 
@@ -175,7 +209,8 @@ async def invite_accept(sid, data):
         return
 
     async with AsyncSessionLocal() as db:
-        room = await create_room(db, from_user_id)
+        game_key, _ = await _valid_game_key(db, (data or {}).get("game_key"))
+        room = await create_room(db, from_user_id, preset_game_key=game_key)
         room, match = await join_room(db, room.code, accepter_id)
 
     payload = {"room_code": room.code}
