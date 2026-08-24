@@ -1,29 +1,64 @@
+import random
+
 from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
 
+MATCH_DURATION_MS = 90 * 1000  # 90s race - most sentences typed correctly wins
+
+SENTENCES = [
+    "the quick brown fox jumps over the lazy dog",
+    "pack my box with five dozen liquor jugs",
+    "how vexingly quick daft zebras jump",
+    "sphinx of black quartz judge my vow",
+    "the five boxing wizards jump quickly",
+    "waltz bad nymph for quick jigs vex",
+    "practice makes perfect every single day",
+    "typing fast takes patience and practice",
+    "never underestimate the power of a good plan",
+    "the early bird catches the worm every morning",
+    "great things never come from comfort zones",
+    "believe you can and you are halfway there",
+    "success is the sum of small efforts repeated",
+    "a journey of a thousand miles starts with one step",
+    "code fast but always test before you ship",
+    "keep calm and focus on the next move",
+    "friendship and rivalry make every duel exciting",
+    "the night sky was full of bright shining stars",
+    "coffee first then conquer the whole world",
+    "simple ideas often solve the hardest problems",
+]
+
+
+def _new_sentence(exclude: str | None = None) -> str:
+    choices = [s for s in SENTENCES if s != exclude] or SENTENCES
+    return random.choice(choices)
+
 
 class TypingRaceEngine(BaseGameEngine):
-    """Placeholder for Typing Race — reserved slot (GameKey, registry
-    entry, seed row) so every shared file is already final, but the real
-    rules aren't implemented yet. The frontend doesn't offer this game for
-    selection (see lib/games.ts's comingSoon flag), so a real match should
-    never actually reach this engine — but if one somehow does, it resolves
-    immediately as a draw instead of hanging.
-
-    To implement this game for real: replace the body of this class (keep
-    the class name and game_key so registry.py never needs to change), then
-    flip comingSoon to false for TYPING_RACE in the frontend's lib/games.ts.
-    """
+    """Both players race to correctly retype the same displayed sentence.
+    First exact (case/whitespace-insensitive) match scores a point and a
+    new sentence is served to both immediately - repeat until time is up.
+    Nothing here needs hiding: the sentence itself is what's on screen."""
 
     game_key = GameKey.TYPING_RACE
-    duration_ms = 1000
+    duration_ms = MATCH_DURATION_MS
 
     def create_initial_payload(self) -> dict:
-        return {"coming_soon": True}
-
-    def on_match_start(self, state: dict) -> None:
-        for p in state["players"].values():
-            p["finished"] = True
+        return {"round": 1, "sentence": _new_sentence()}
 
     def apply_action(self, state: dict, user_id: str, action_type: str, data: dict) -> dict:
+        if action_type != "submit_text":
+            return state
+        payload = state["payload"]
+
+        text = data.get("text")
+        if not isinstance(text, str):
+            raise ValueError("INVALID_TEXT")
+
+        if text.strip().lower() != payload["sentence"].strip().lower():
+            raise ValueError("MISMATCH")
+
+        state["players"][user_id]["score"] += 1
+        payload["round"] += 1
+        payload["sentence"] = _new_sentence(exclude=payload["sentence"])
         return state
