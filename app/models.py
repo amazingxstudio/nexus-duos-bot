@@ -130,6 +130,12 @@ class Room(Base):
     preset_game_key: Mapped[GameKey | None] = mapped_column(Enum(GameKey), nullable=True)
 
     status: Mapped[RoomStatus] = mapped_column(Enum(RoomStatus), default=RoomStatus.WAITING_FOR_PLAYER)
+    # The message_id of the "🎮 Room created" DM sent to the creator's
+    # Telegram chat when this room was made via the REST routes (create /
+    # quick-duel). None for invite/rematch-created rooms, which never get a
+    # DM in the first place. Used to delete that message the instant the
+    # code becomes unusable — see join_room_route in routes/rooms.py.
+    telegram_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
