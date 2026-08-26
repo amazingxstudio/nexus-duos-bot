@@ -5,24 +5,50 @@ from app.games.engine.base import BaseGameEngine
 
 MATCH_DURATION_MS = 90 * 1000  # 90s race - most rounds spotted wins
 GRID_SIZE = 16  # 4x4
-EMOJIS = ["\U0001F537", "\u2B50", "\U0001F53A", "\U0001F536", "\U0001F538", "\U0001F539", "\u2764\ufe0f", "\U0001F49A"]
+
+# Each round fills the grid with SHAPES[base] and hides exactly one
+# SHAPES[odd] tile among them. Pairs are chosen so the two silhouettes are
+# never confusable at a glance (this replaced an earlier emoji version -
+# several emoji, like diamonds and 5-point stars, are close to
+# rotationally/visually symmetric and made the "odd one" invisible; plain
+# geometric shapes with a fixed accent color sidestep that entirely, and
+# render identically across every device instead of depending on the
+# phone's emoji font).
+SHAPE_PAIRS = [
+    ("circle", "square"),
+    ("square", "triangle"),
+    ("triangle", "star"),
+    ("star", "heart"),
+    ("heart", "hexagon"),
+    ("hexagon", "circle"),
+    ("diamond", "square"),
+    ("circle", "star"),
+]
+ACCENTS = ("cyan", "magenta", "violet", "ember")
 
 
 def _new_round(exclude_index: int | None = None) -> dict:
-    emoji = random.choice(EMOJIS)
+    base_shape, odd_shape = random.choice(SHAPE_PAIRS)
     odd_index = random.randint(0, GRID_SIZE - 1)
     if exclude_index is not None and GRID_SIZE > 1:
         while odd_index == exclude_index:
             odd_index = random.randint(0, GRID_SIZE - 1)
-    return {"emoji": emoji, "odd_index": odd_index, "grid_size": GRID_SIZE}
+    return {
+        "base_shape": base_shape,
+        "odd_shape": odd_shape,
+        "odd_index": odd_index,
+        "grid_size": GRID_SIZE,
+        "accent": random.choice(ACCENTS),
+    }
 
 
 class FindTheDifferentEngine(BaseGameEngine):
-    """A grid of identical icons is shown; one cell (odd_index) is rendered
-    upside-down by the client. First player to tap that cell scores a point
-    and a fresh grid is generated for both - repeat until time is up. The
-    odd cell has to be visible in the payload for the client to render the
-    flip, same as Memory Race's sequence - there's no secret to strip."""
+    """A grid of identical shape icons is shown; one cell (odd_index) is a
+    different shape entirely. First player to tap that cell scores a point
+    and a fresh grid (new shape pair, new accent color, new odd cell) is
+    generated for both - repeat until time is up. The odd cell has to be
+    visible in the payload for the client to render it, same as Memory
+    Race's sequence - there's no secret to strip."""
 
     game_key = GameKey.FIND_THE_DIFFERENT
     duration_ms = MATCH_DURATION_MS
