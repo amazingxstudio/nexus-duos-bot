@@ -1,4 +1,5 @@
 import random
+from collections import deque
 
 from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
@@ -30,28 +31,52 @@ WORDS = [
     ("A vehicle that flies in the sky", "airplane"),
     ("The natural satellite of Earth", "moon"),
     ("A sweet treat made of chocolate or fruit", "candy"),
-    ("A insect that makes honey", "bee"),
+    ("An insect that makes honey", "bee"),
     ("The tallest animal in the world", "giraffe"),
+    ("A place where movies are shown", "cinema"),
+    ("Something you use to unlock a door", "key"),
+    ("A cold treat you eat in summer", "icecream"),
+    ("A large grey animal with a trunk", "elephant"),
+    ("The tool a carpenter hits nails with", "hammer"),
+    ("Where you keep clothes in a bedroom", "closet"),
+    ("A yellow vegetable rabbits love", "carrot"),
+    ("A device that shows the time", "clock"),
+    ("A round object you kick in football", "ball"),
+    ("A place where you buy groceries", "market"),
+    ("A soft object you rest your head on", "pillow"),
+    ("A person who teaches at school", "teacher"),
+    ("A vehicle that runs on rails", "train"),
+    ("A yellow bird that can talk", "parrot"),
+    ("A place where sick people are treated", "hospital"),
+    ("The tool used to cut paper", "scissors"),
+    ("A sour yellow citrus fruit", "lemon"),
+    ("A small house for a dog", "kennel"),
+    ("A container you carry water in", "bottle"),
+    ("The organ that pumps blood", "heart"),
+    ("A stringed instrument you strum", "guitar"),
+    ("A flying mammal active at night", "bat"),
+    ("A place where planes take off", "airport"),
+    ("The white frozen stuff that falls in winter", "snow"),
+    ("A device that lets you see far away", "telescope"),
+    ("A young dog", "puppy"),
 ]
 
 
-def _new_word(exclude: str | None = None) -> tuple[str, str]:
-    choices = [w for w in WORDS if w[1] != exclude] or WORDS
-    return random.choice(choices)
-
-
 class GuessTheWordEngine(BaseGameEngine):
-    """Both players see a clue and the answer's letter count; first to type
-    the exact word scores a point. The real word stays server-side only -
-    sanitize_payload_for_client strips it before every broadcast, exactly
-    like the base class's own "Code Breaker" example describes."""
+    """Both players see a clue plus the answer's first and last letter;
+    first to type the exact word scores a point. The real word stays
+    server-side only - sanitize_payload_for_client strips it before every
+    broadcast, exactly like the base class's own "Code Breaker" example
+    describes. A module-level recency buffer avoids repeating a
+    clue/answer pair too soon, within a match or across the next few."""
 
     game_key = GameKey.GUESS_THE_WORD
     duration_ms = MATCH_DURATION_MS
+    _recent: deque[str] = deque(maxlen=18)
 
     def create_initial_payload(self) -> dict:
-        clue, word = _new_word()
-        return {"round": 1, "clue": clue, "word": word, "word_length": len(word)}
+        clue, word = self._new_word()
+        return self._round_payload(1, clue, word)
 
     def sanitize_payload_for_client(self, payload: dict) -> dict:
         return {k: v for k, v in payload.items() if k != "word"}
@@ -69,9 +94,26 @@ class GuessTheWordEngine(BaseGameEngine):
             raise ValueError("WRONG_GUESS")
 
         state["players"][user_id]["score"] += 1
-        payload["round"] += 1
-        clue, word = _new_word(exclude=payload["word"])
-        payload["clue"] = clue
-        payload["word"] = word
-        payload["word_length"] = len(word)
+        clue, word = self._new_word(exclude=payload["word"])
+        state["payload"] = self._round_payload(payload["round"] + 1, clue, word)
         return state
+
+    @staticmethod
+    def _round_payload(round_no: int, clue: str, word: str) -> dict:
+        return {
+            "round": round_no,
+            "clue": clue,
+            "word": word,
+            "word_length": len(word),
+            "first_letter": word[0].upper(),
+            "last_letter": word[-1].upper(),
+        }
+
+    @classmethod
+    def _new_word(cls, exclude: str | None = None) -> tuple[str, str]:
+        choices = [w for w in WORDS if w[1] != exclude and w[1] not in cls._recent]
+        if not choices:
+            choices = [w for w in WORDS if w[1] != exclude] or WORDS
+        pick = random.choice(choices)
+        cls._recent.append(pick[1])
+        return pick
