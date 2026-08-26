@@ -73,15 +73,35 @@ def build_bot_application() -> Application:
     return bot_application
 
 
-async def send_telegram_message(telegram_id: int, text: str, parse_mode: str | None = None) -> None:
+async def send_telegram_message(telegram_id: int, text: str, parse_mode: str | None = None) -> int | None:
     """Lets the web app (REST routes, sockets) push a DM through the bot —
     e.g. sending a freshly-created room code back to its creator.
 
     parse_mode="HTML" lets the caller wrap part of the text in <code>...</code>
     so Telegram renders it as a monospace, tap-to-copy span (tapping/holding a
     <code> span in Telegram shows "Copy" for just that text, rather than the
-    whole message)."""
+    whole message).
+
+    Returns the sent message's id (so a caller can delete it again later —
+    see delete_telegram_message), or None if sending failed."""
     try:
-        await bot_application.bot.send_message(chat_id=telegram_id, text=text, parse_mode=parse_mode)
+        msg = await bot_application.bot.send_message(chat_id=telegram_id, text=text, parse_mode=parse_mode)
+        return msg.message_id
     except TelegramError:
         logger.exception("Failed to send Telegram message to %s", telegram_id)
+        return None
+
+
+async def delete_telegram_message(telegram_id: int, message_id: int) -> None:
+    """Removes a message the bot previously sent. Used the instant a room
+    code stops being usable (someone joined, so it can't be used to join
+    again) to clean up the original "Room created" DM — so a player's chat
+    with the bot doesn't fill up with dead, already-used codes.
+
+    Failure here (message already gone, chat blocked, message too old,
+    etc.) is never allowed to break the join flow that triggered it — it's
+    swallowed and just logged."""
+    try:
+        await bot_application.bot.delete_message(chat_id=telegram_id, message_id=message_id)
+    except TelegramError:
+        logger.warning("Could not delete Telegram message %s for %s", message_id, telegram_id)
