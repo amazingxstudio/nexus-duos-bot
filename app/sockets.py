@@ -9,7 +9,7 @@ from app.cache import set_user_online, set_user_offline
 from app.database import AsyncSessionLocal
 from app.models import Room, Match, Game, GameKey, RoomStatus, Profile, Friend, User
 from app.games.engine.registry import get_game_engine, is_game_implemented
-from app.games.engine.match_runner import start_match, handle_game_action, handle_player_disconnect
+from app.games.engine.match_runner import start_match, handle_game_action, handle_player_disconnect, leave_match
 from app.matchmaking import create_room, join_room
 
 logger = logging.getLogger("nexus_duos.sockets")
@@ -133,6 +133,53 @@ async def game_action(sid, data):
         return
 
     await handle_game_action(engine, match_id, user_id, action_type, action_data)
+
+
+@sio.on("match:leave")
+async def match_leave(sid, data):
+    """Player tapped Exit and confirmed. leave_match decides forfeit vs
+    void based on whether the opponent is still connected — see its
+    docstring in match_runner.py."""
+    session = await sio.get_session(sid)
+    user_id = session["user_id"]
+    match_id = (data or {}).get("match_id")
+    if not match_id:
+        return
+
+    async with AsyncSessionLocal() as db:
+        match = await db.get(Match, match_id)
+        if not match or user_id not in (match.player1_id, match.player2_id):
+            return
+        game = await db.get(Game, match.game_id)
+
+    try:
+        engine = get_game_engine(game.key)
+    except ValueError:
+        return
+
+    await leave_match(engine, match_id, user_id)
+
+
+@sio.on("turn_nudge")
+async def turn_nudge(sid, data):
+    """A player is waiting on their rival's turn (Connect Four / Dots and
+    Boxes) and tapped the nudge button — relay a one-off buzz to the rival.
+    No rate limiting server-side; the frontend enforces its own 3s cooldown
+    on the button itself."""
+    session = await sio.get_session(sid)
+    user_id = session["user_id"]
+    match_id = (data or {}).get("match_id")
+    if not match_id:
+        return
+
+    async with AsyncSessionLocal() as db:
+        match = await db.get(Match, match_id)
+        if not match or user_id not in (match.player1_id, match.player2_id):
+            return
+        opponent_id = match.player2_id if match.player1_id == user_id else match.player1_id
+
+    if opponent_id:
+        await sio.emit("turn_nudge", {"match_id": match_id, "from_user_id": user_id}, room=f"user:{opponent_id}")
 
 
 # ---- Presence broadcast to friends -------------------------------------
