@@ -7,20 +7,24 @@ MATCH_DURATION_MS = 90 * 1000  # 90s race - most correct answers wins
 OPS = ("+", "-", "\u00d7")  # + - x
 
 
-def _new_problem() -> dict:
-    op = random.choice(OPS)
-    if op == "+":
-        a, b = random.randint(1, 60), random.randint(1, 60)
-        answer = a + b
-    elif op == "-":
-        a, b = random.randint(1, 60), random.randint(1, 60)
-        if b > a:
-            a, b = b, a  # keep it non-negative
-        answer = a - b
-    else:
-        a, b = random.randint(2, 12), random.randint(2, 12)
-        answer = a * b
-    return {"a": a, "b": b, "op": op, "answer": answer}
+def _new_problem(exclude: dict | None = None) -> dict:
+    for _ in range(5):  # a handful of tries is enough to dodge an exact repeat
+        op = random.choice(OPS)
+        if op == "+":
+            a, b = random.randint(1, 60), random.randint(1, 60)
+            answer = a + b
+        elif op == "-":
+            a, b = random.randint(1, 60), random.randint(1, 60)
+            if b > a:
+                a, b = b, a  # keep it non-negative
+            answer = a - b
+        else:
+            a, b = random.randint(2, 12), random.randint(2, 12)
+            answer = a * b
+        problem = {"a": a, "b": b, "op": op, "answer": answer}
+        if not exclude or (problem["a"], problem["b"], problem["op"]) != (exclude.get("a"), exclude.get("b"), exclude.get("op")):
+            return problem
+    return problem
 
 
 class QuickMathEngine(BaseGameEngine):
@@ -54,5 +58,5 @@ class QuickMathEngine(BaseGameEngine):
 
         state["players"][user_id]["score"] += 1
         payload["round"] += 1
-        payload.update(_new_problem())
+        payload.update(_new_problem(exclude=payload))
         return state
