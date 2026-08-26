@@ -3,7 +3,7 @@ import random
 from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
 
-DOTS = 9  # 9x9 dots -> 8x8 = 64 boxes (doubled from the original 5x5/16-box grid)
+DOTS = 8  # 8x8 dots -> 7x7 = 49 boxes
 BOX_ROWS = DOTS - 1
 BOX_COLS = DOTS - 1
 MATCH_DURATION_MS = 8 * 60_000  # safety cap — the real end condition is "all boxes filled"; bumped up a bit since the bigger grid takes longer to fill
@@ -22,6 +22,10 @@ class DotsAndBoxesEngine(BaseGameEngine):
             "v_lines": [[None] * DOTS for _ in range(DOTS - 1)],
             "boxes": [[None] * BOX_COLS for _ in range(BOX_ROWS)],
             "turn_user_id": None,
+            # The most recently drawn line — lets the client highlight the
+            # opponent's move for a moment instead of it just silently
+            # appearing. None until the first line is drawn.
+            "last_move": None,
         }
 
     def on_match_start(self, state: dict) -> None:
@@ -52,6 +56,7 @@ class DotsAndBoxesEngine(BaseGameEngine):
         if lines[row][col] is not None:
             raise ValueError("LINE_ALREADY_DRAWN")
         lines[row][col] = user_id
+        payload["last_move"] = {"type": line_type, "row": row, "col": col, "by": user_id}
 
         completed = _completed_boxes(payload, line_type, row, col)
         for br, bc in completed:
