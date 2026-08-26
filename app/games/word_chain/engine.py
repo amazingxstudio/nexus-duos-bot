@@ -2,6 +2,7 @@ import random
 
 from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
+from app.games.engine.utils import now_ms
 
 MATCH_DURATION_MS = 90 * 1000  # 90s race - most links added wins
 
@@ -130,33 +131,71 @@ for _w in WORD_POOL:
 # Prefer starting the chain on words whose last letter has plenty of options.
 _GOOD_STARTERS = [w for w in WORD_POOL if _BY_FIRST_LETTER.get(w[-1])]
 
+TURN_SECONDS = 4  # the "on time" window shown as the countdown
+MAX_OVERTIME_SECONDS = 4  # extra grace before an unanswered turn auto-skips
+GRACE_MS = 300  # network-jitter cushion right at the 4s boundary
+
 
 class WordChainEngine(BaseGameEngine):
-    """A shared chain: whoever is first to submit a valid word - starting
-    with the current word's last letter, drawn from the known noun list,
-    and not already used this match - extends the chain and scores a
-    point. Everything needed to render the current word is already public,
-    so nothing needs sanitizing here.
+    """Turn-based, not simultaneous: players alternate, and whoever's turn
+    it is has TURN_SECONDS to submit a valid link - starting with the
+    current word's last letter, drawn from the known noun list, and not
+    already used this match. Speed matters: answering quickly scores more,
+    answering after the 4s mark costs points (capped, so a slow round
+    never feels crushing), and going completely silent for
+    TURN_SECONDS + MAX_OVERTIME_SECONDS auto-skips the turn with a small
+    penalty so the game can never stall on one player.
 
-    Validation is against this bundled offline noun list rather than a
-    live dictionary API: a real-time gameplay action needs to resolve in
-    milliseconds and can't depend on a third-party API's uptime/latency,
-    and every engine in this codebase validates actions synchronously (a
-    live-API version would need apply_action to become async everywhere,
-    a much bigger change). The list is deliberately noun-only and large
-    (1000+ words) so it rarely dead-ends."""
+    turn_started_at (server ms) rides along in the payload so both clients
+    can render the same countdown, and either client may report a timeout
+    (see the "turn_timeout" action) - the server re-validates the elapsed
+    time itself before trusting it, so an early or spoofed report is
+    simply rejected.
+
+    Validation is against the bundled offline noun list rather than a live
+    dictionary API - see the module docstring further up for why. Nothing
+    here needs sanitizing: the whole chain is public information."""
 
     game_key = GameKey.WORD_CHAIN
     duration_ms = MATCH_DURATION_MS
 
     def create_initial_payload(self) -> dict:
         start = random.choice(_GOOD_STARTERS or WORD_POOL)
-        return {"round": 1, "current_word": start, "used_words": [start]}
+        return {
+            "round": 1,
+            "current_word": start,
+            "used_words": [start],
+            "turn_user_id": None,
+            "turn_started_at": None,
+            "last_turn_delta": None,  # {"user_id", "points"} - lets the client flash "+4" / "-2"
+        }
+
+    def on_match_start(self, state: dict) -> None:
+        player_ids = list(state["players"].keys())
+        random.shuffle(player_ids)
+        state["payload"]["turn_user_id"] = player_ids[0]
+        state["payload"]["turn_started_at"] = now_ms()
 
     def apply_action(self, state: dict, user_id: str, action_type: str, data: dict) -> dict:
+        payload = state["payload"]
+
+        if action_type == "turn_timeout":
+            # Either player's client can report this - the server is the
+            # one actually deciding whether it's really been long enough.
+            elapsed_ms = now_ms() - payload["turn_started_at"]
+            if elapsed_ms < (TURN_SECONDS + MAX_OVERTIME_SECONDS) * 1000 - GRACE_MS:
+                raise ValueError("TOO_EARLY")
+            timed_out_user = payload["turn_user_id"]
+            new_score = max(0, state["players"][timed_out_user]["score"] - 2)
+            state["players"][timed_out_user]["score"] = new_score
+            payload["last_turn_delta"] = {"user_id": timed_out_user, "points": -2, "reason": "TIMEOUT"}
+            self._advance_turn(state)
+            return state
+
         if action_type != "submit_word":
             return state
-        payload = state["payload"]
+        if payload["turn_user_id"] != user_id:
+            raise ValueError("NOT_YOUR_TURN")
 
         word = data.get("word")
         if not isinstance(word, str):
@@ -172,8 +211,25 @@ class WordChainEngine(BaseGameEngine):
         if word in payload["used_words"]:
             raise ValueError("ALREADY_USED")
 
-        state["players"][user_id]["score"] += 1
+        elapsed_sec = (now_ms() - payload["turn_started_at"]) / 1000
+        if elapsed_sec <= TURN_SECONDS + GRACE_MS / 1000:
+            capped = min(elapsed_sec, TURN_SECONDS)
+            points = max(1, round(5 - capped))
+        else:
+            overtime = elapsed_sec - TURN_SECONDS
+            points = -min(3, max(1, round(overtime)))
+
+        state["players"][user_id]["score"] = max(0, state["players"][user_id]["score"] + points)
+        payload["last_turn_delta"] = {"user_id": user_id, "points": points, "reason": "ANSWER"}
         payload["round"] += 1
         payload["current_word"] = word
         payload["used_words"].append(word)
+        self._advance_turn(state)
         return state
+
+    @staticmethod
+    def _advance_turn(state: dict) -> None:
+        payload = state["payload"]
+        opponent_id = next(uid for uid in state["players"] if uid != payload["turn_user_id"])
+        payload["turn_user_id"] = opponent_id
+        payload["turn_started_at"] = now_ms()
