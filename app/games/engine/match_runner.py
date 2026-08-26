@@ -87,7 +87,7 @@ async def handle_game_action(engine, match_id: str, user_id: str, action_type: s
         await finish_match(engine, match_id)
 
 
-async def finish_match(engine, match_id: str) -> None:
+async def finish_match(engine, match_id: str, forced_result: dict | None = None) -> None:
     state = await load_match_state(match_id)
     if not state or state["status"] == "finished":
         return
@@ -97,7 +97,10 @@ async def finish_match(engine, match_id: str) -> None:
     if task:
         task.cancel()
 
-    result = engine.compute_result(state)
+    # forced_result lets a forfeit declare a winner regardless of the score
+    # at the moment the other player left — normal completion still goes
+    # through the engine's own scoring rules.
+    result = forced_result if forced_result is not None else engine.compute_result(state)
     player_ids = list(result["scores"].keys())
     p1_id = player_ids[0]
     p2_id = player_ids[1] if len(player_ids) > 1 else None
@@ -169,3 +172,60 @@ async def handle_player_disconnect(match_id: str, user_id: str) -> None:
     if user_id in state["players"]:
         state["players"][user_id]["connected"] = False
     await save_match_state(match_id, state)
+
+
+async def leave_match(engine, match_id: str, leaving_user_id: str) -> None:
+    """Called when a player deliberately exits an in-progress match (the
+    Exit button, after they've confirmed). What happens depends on whether
+    their rival is still actually there:
+
+    - Rival still connected: this counts as a forfeit. The leaver takes the
+      loss and the rival takes the win, regardless of the score at the
+      moment they left.
+    - Rival already disconnected: neither side really finished this match,
+      so it's voided instead — no result is recorded for anyone and it
+      never touches either player's stats.
+    """
+    state = await load_match_state(match_id)
+    if not state or state["status"] != "active":
+        return
+
+    players = state["players"]
+    opponent_id = next((uid for uid in players if uid != leaving_user_id), None)
+    opponent_connected = bool(opponent_id and players[opponent_id]["connected"])
+
+    if opponent_connected:
+        result = {
+            "match_id": match_id,
+            "scores": {uid: p["score"] for uid, p in players.items()},
+            "winner_id": opponent_id,
+        }
+        await finish_match(engine, match_id, forced_result=result)
+        return
+
+    # Void path — mirrors finish_match's cleanup, but writes no result.
+    state["status"] = "finished"
+    task = _active_timers.pop(match_id, None)
+    if task:
+        task.cancel()
+
+    async with AsyncSessionLocal() as db:
+        match = await db.get(Match, match_id)
+        if match:
+            match.finished_at = datetime.now(timezone.utc)
+            match.duration_ms = now_ms() - state["started_at"]
+            match.player1_score = players.get(match.player1_id, {}).get("score", 0)
+            match.player2_score = players.get(match.player2_id, {}).get("score", 0) if match.player2_id else 0
+            # winner_id / player*_result deliberately left unset — a voided
+            # match shouldn't show up as a win, loss, or draw for anyone.
+
+            if match.room_id:
+                room = await db.get(Room, match.room_id)
+                if room:
+                    room.status = RoomStatus.FINISHED
+                    room.finished_at = datetime.now(timezone.utc)
+
+            await db.commit()
+
+    await delete_match_state(match_id)
+    await sio.emit("game_cancelled", {"match_id": match_id}, room=f"room:{state['room_code']}")
