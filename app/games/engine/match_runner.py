@@ -68,6 +68,7 @@ async def handle_game_action(engine, match_id: str, user_id: str, action_type: s
         updated = engine.apply_action(state, user_id, action_type, data)
     except ValueError as e:
         logger.warning("Rejected invalid game action: %s", e)
+        await sio.emit("action_rejected", {"match_id": match_id, "reason": str(e)}, room=f"user:{user_id}")
         return
 
     await save_match_state(match_id, updated)
