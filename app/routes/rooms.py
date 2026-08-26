@@ -9,7 +9,7 @@ from app.models import Room, User, Profile, Game, Match
 from app.schemas import JoinRoomRequest, SubmitPicksRequest, SubmitTieBreakRequest
 from app.matchmaking import create_room, join_room, submit_vote_picks, submit_tie_break_vote
 from app.socketio_app import sio
-from app.bot import send_telegram_message
+from app.bot import send_telegram_message, delete_telegram_message
 
 router = APIRouter()
 
@@ -52,11 +52,14 @@ async def _room_response(db: AsyncSession, room: Room) -> dict:
 @router.post("")
 async def create_room_route(auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
     room = await create_room(db, auth["user_id"])
-    await send_telegram_message(
+    message_id = await send_telegram_message(
         int(auth["telegram_id"]),
         f"🎮 Room created: <code>{room.code}</code>\n\nTap the code to copy it, then share it with a friend so they can join you in Nexus Duos.",
         parse_mode="HTML",
     )
+    if message_id:
+        room.telegram_message_id = message_id
+        await db.commit()
     return {"room": await _room_response(db, room)}
 
 
@@ -64,11 +67,14 @@ async def create_room_route(auth=Depends(require_auth), db: AsyncSession = Depen
 async def quick_duel_route(body: QuickDuelRequest, auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
     """Tap-a-game-on-Home flow: creates a room pre-locked to one game — no voting once player2 joins."""
     room = await create_room(db, auth["user_id"], preset_game_key=body.game_key)
-    await send_telegram_message(
+    message_id = await send_telegram_message(
         int(auth["telegram_id"]),
         f"🎮 Room created: <code>{room.code}</code>\n\nTap the code to copy it, then share it with a friend so they can join you in Nexus Duos.",
         parse_mode="HTML",
     )
+    if message_id:
+        room.telegram_message_id = message_id
+        await db.commit()
     return {"room": await _room_response(db, room)}
 
 
@@ -78,6 +84,17 @@ async def join_room_route(body: JoinRoomRequest, auth=Depends(require_auth), db:
         room, match = await join_room(db, body.code.strip().upper(), auth["user_id"])
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # The code just became unusable — it was a one-shot invite for a room
+    # that's now full. Clean up the original "Room created" DM in the
+    # creator's Telegram chat so it doesn't linger looking like a still-open
+    # invite. (Rooms created via in-app invite/rematch never had a DM in the
+    # first place, so telegram_message_id is simply None for those — this
+    # is a no-op for them.)
+    if room.telegram_message_id:
+        creator = await db.get(User, room.player1_id)
+        if creator:
+            await delete_telegram_message(creator.telegram_id, room.telegram_message_id)
 
     room_out = await _room_response(db, room)
     await sio.emit("room_joined", {"room": room_out}, room=f"room:{room.code}")
