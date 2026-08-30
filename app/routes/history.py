@@ -52,7 +52,16 @@ async def _serialize_match(db, m, perspective_user_id):
     if opponent_id:
         opp_profile = (await db.execute(select(Profile).where(Profile.user_id == opponent_id))).scalar_one_or_none()
         if opp_profile:
-            opponent_out = {"nickname": opp_profile.nickname, "player_id": opp_profile.player_id, "score": opponent_score}
+            # This is the opponent's OWN privacy choice, not the viewer's —
+            # if they've turned off "show history to all", their identity
+            # is masked here too, not just on their own profile page. No
+            # player_id means the frontend has nothing to link to.
+            opp_settings = (await db.execute(select(UserSettings).where(UserSettings.user_id == opponent_id))).scalar_one_or_none()
+            opponent_visible = opp_settings.show_history_to_all if opp_settings else True
+            if opponent_visible:
+                opponent_out = {"nickname": opp_profile.nickname, "player_id": opp_profile.player_id, "score": opponent_score}
+            else:
+                opponent_out = {"nickname": "Anonymous", "score": opponent_score}
     return {
         "id": m.id, "game": game.name if game else "Unknown",
         "game_key": game.key.value if game else None, "mode": m.mode.value,

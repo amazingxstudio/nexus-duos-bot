@@ -11,7 +11,8 @@ router = APIRouter()
 
 
 class AddFriendRequest(BaseModel):
-    player_id: str
+    player_id: str | None = None
+    user_id: str | None = None
 
 
 def _card(profile: Profile, user: User, online: bool) -> dict:
@@ -43,7 +44,12 @@ async def search_players(query: str, auth=Depends(require_auth), db=Depends(get_
 
 @router.post("/friends")
 async def add_friend(body: AddFriendRequest, auth=Depends(require_auth), db=Depends(get_db)):
-    target_profile = (await db.execute(select(Profile).where(Profile.player_id == body.player_id.strip().upper()))).scalar_one_or_none()
+    if body.user_id:
+        target_profile = (await db.execute(select(Profile).where(Profile.user_id == body.user_id))).scalar_one_or_none()
+    elif body.player_id:
+        target_profile = (await db.execute(select(Profile).where(Profile.player_id == body.player_id.strip().upper()))).scalar_one_or_none()
+    else:
+        raise HTTPException(status_code=400, detail="MISSING_IDENTIFIER")
     if not target_profile:
         raise HTTPException(status_code=404, detail="PLAYER_NOT_FOUND")
     if target_profile.user_id == auth["user_id"]:
