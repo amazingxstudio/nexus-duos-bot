@@ -131,7 +131,7 @@ for _w in WORD_POOL:
 # Prefer starting the chain on words whose last letter has plenty of options.
 _GOOD_STARTERS = [w for w in WORD_POOL if _BY_FIRST_LETTER.get(w[-1])]
 
-TURN_SECONDS = 4  # the "on time" window shown as the countdown
+TURN_SECONDS = 6  # the "on time" window shown as the countdown
 MAX_OVERTIME_SECONDS = 4  # extra grace before an unanswered turn auto-skips
 GRACE_MS = 300  # network-jitter cushion right at the 4s boundary
 
