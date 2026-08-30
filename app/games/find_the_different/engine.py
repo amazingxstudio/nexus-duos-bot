@@ -8,29 +8,22 @@ GRID_SIZE = 36  # 6x6 - bumped up from 4x4; a small grid made the odd one
                 # too easy to spot at a glance without real scanning.
 
 # Two round "kinds" alternate for variety instead of always being shapes:
-# - "shape": a grid of one geometric icon with a single different icon
-#   hidden in it. Pairs are chosen so the two silhouettes are never
-#   confusable at a glance (this replaced an earlier emoji version -
-#   several emoji, like diamonds and 5-point stars, are close to
-#   rotationally/visually symmetric and made the "odd one" invisible).
+# - "shape": a grid of one geometric icon, repeated everywhere — the odd
+#   cell is the *same* icon, just rotated a few degrees. Using a different
+#   icon for the odd one made its silhouette give it away instantly; same
+#   icon + a subtle rotation is what actually forces real scanning instead
+#   of a glance.
 # - "glyph": a grid of one letter/digit with a single different one hidden
-#   in it. Pairs are hand-picked to be clearly distinct (no O/0, I/1/l
-#   style near-lookalikes).
-SHAPE_PAIRS = [
-    ("circle", "square"),
-    ("square", "triangle"),
-    ("triangle", "star"),
-    ("star", "heart"),
-    ("heart", "hexagon"),
-    ("hexagon", "circle"),
-    ("diamond", "square"),
-    ("circle", "star"),
-]
+#   in it. Pairs are hand-picked to be near-lookalikes (O/0, I/1, 5/S,
+#   8/B, 6/9…) on purpose — that's what makes them hard to spot, same
+#   idea as the shape rotation above.
+SHAPES = ("circle", "square", "triangle", "star", "heart", "hexagon", "diamond")
+ODD_ROTATION_DEG_RANGE = (18, 32)  # magnitude only — sign is randomized separately
 GLYPH_PAIRS = [
-    ("A", "N"), ("B", "K"), ("C", "M"), ("D", "V"), ("E", "L"),
-    ("F", "T"), ("G", "W"), ("H", "X"), ("J", "Y"), ("Q", "Z"),
-    ("2", "9"), ("3", "7"), ("4", "6"), ("5", "8"),
-    ("A", "7"), ("B", "3"), ("N", "5"), ("W", "2"), ("R", "4"),
+    ("O", "0"), ("0", "O"), ("I", "1"), ("1", "I"), ("5", "S"), ("S", "5"),
+    ("8", "B"), ("B", "8"), ("6", "9"), ("9", "6"), ("2", "Z"), ("Z", "2"),
+    ("P", "R"), ("R", "P"), ("E", "F"), ("C", "G"), ("U", "V"), ("M", "N"),
+    ("D", "O"), ("Q", "O"), ("V", "Y"),
 ]
 ROUND_KINDS = ("shape", "glyph")
 ACCENTS = ("cyan", "magenta", "violet", "ember")
@@ -50,9 +43,11 @@ def _new_round(exclude_index: int | None = None) -> dict:
         "accent": random.choice(ACCENTS),
     }
     if kind == "shape":
-        base_shape, odd_shape = random.choice(SHAPE_PAIRS)
-        round_data["base_shape"] = base_shape
-        round_data["odd_shape"] = odd_shape
+        shape = random.choice(SHAPES)
+        round_data["base_shape"] = shape
+        round_data["odd_shape"] = shape
+        magnitude = random.randint(*ODD_ROTATION_DEG_RANGE)
+        round_data["odd_rotation"] = magnitude if random.random() < 0.5 else -magnitude
     else:
         base_glyph, odd_glyph = random.choice(GLYPH_PAIRS)
         round_data["base_glyph"] = base_glyph
