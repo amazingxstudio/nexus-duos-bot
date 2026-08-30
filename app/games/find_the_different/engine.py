@@ -4,16 +4,18 @@ from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
 
 MATCH_DURATION_MS = 90 * 1000  # 90s race - most rounds spotted wins
-GRID_SIZE = 16  # 4x4
+GRID_SIZE = 36  # 6x6 - bumped up from 4x4; a small grid made the odd one
+                # too easy to spot at a glance without real scanning.
 
-# Each round fills the grid with SHAPES[base] and hides exactly one
-# SHAPES[odd] tile among them. Pairs are chosen so the two silhouettes are
-# never confusable at a glance (this replaced an earlier emoji version -
-# several emoji, like diamonds and 5-point stars, are close to
-# rotationally/visually symmetric and made the "odd one" invisible; plain
-# geometric shapes with a fixed accent color sidestep that entirely, and
-# render identically across every device instead of depending on the
-# phone's emoji font).
+# Two round "kinds" alternate for variety instead of always being shapes:
+# - "shape": a grid of one geometric icon with a single different icon
+#   hidden in it. Pairs are chosen so the two silhouettes are never
+#   confusable at a glance (this replaced an earlier emoji version -
+#   several emoji, like diamonds and 5-point stars, are close to
+#   rotationally/visually symmetric and made the "odd one" invisible).
+# - "glyph": a grid of one letter/digit with a single different one hidden
+#   in it. Pairs are hand-picked to be clearly distinct (no O/0, I/1/l
+#   style near-lookalikes).
 SHAPE_PAIRS = [
     ("circle", "square"),
     ("square", "triangle"),
@@ -24,31 +26,47 @@ SHAPE_PAIRS = [
     ("diamond", "square"),
     ("circle", "star"),
 ]
+GLYPH_PAIRS = [
+    ("A", "N"), ("B", "K"), ("C", "M"), ("D", "V"), ("E", "L"),
+    ("F", "T"), ("G", "W"), ("H", "X"), ("J", "Y"), ("Q", "Z"),
+    ("2", "9"), ("3", "7"), ("4", "6"), ("5", "8"),
+    ("A", "7"), ("B", "3"), ("N", "5"), ("W", "2"), ("R", "4"),
+]
+ROUND_KINDS = ("shape", "glyph")
 ACCENTS = ("cyan", "magenta", "violet", "ember")
 
 
 def _new_round(exclude_index: int | None = None) -> dict:
-    base_shape, odd_shape = random.choice(SHAPE_PAIRS)
     odd_index = random.randint(0, GRID_SIZE - 1)
     if exclude_index is not None and GRID_SIZE > 1:
         while odd_index == exclude_index:
             odd_index = random.randint(0, GRID_SIZE - 1)
-    return {
-        "base_shape": base_shape,
-        "odd_shape": odd_shape,
+
+    kind = random.choice(ROUND_KINDS)
+    round_data = {
+        "kind": kind,
         "odd_index": odd_index,
         "grid_size": GRID_SIZE,
         "accent": random.choice(ACCENTS),
     }
+    if kind == "shape":
+        base_shape, odd_shape = random.choice(SHAPE_PAIRS)
+        round_data["base_shape"] = base_shape
+        round_data["odd_shape"] = odd_shape
+    else:
+        base_glyph, odd_glyph = random.choice(GLYPH_PAIRS)
+        round_data["base_glyph"] = base_glyph
+        round_data["odd_glyph"] = odd_glyph
+    return round_data
 
 
 class FindTheDifferentEngine(BaseGameEngine):
-    """A grid of identical shape icons is shown; one cell (odd_index) is a
-    different shape entirely. First player to tap that cell scores a point
-    and a fresh grid (new shape pair, new accent color, new odd cell) is
-    generated for both - repeat until time is up. The odd cell has to be
-    visible in the payload for the client to render it, same as Memory
-    Race's sequence - there's no secret to strip."""
+    """A grid of identical tiles (shapes, or letters/digits — kind varies
+    each round) is shown; one cell (odd_index) is different. First player
+    to tap that cell scores a point and a fresh grid is generated for both
+    - repeat until time is up. The odd cell has to be visible in the
+    payload for the client to render it, same as Memory Race's sequence -
+    there's no secret to strip."""
 
     game_key = GameKey.FIND_THE_DIFFERENT
     duration_ms = MATCH_DURATION_MS
