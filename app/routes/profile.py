@@ -35,6 +35,20 @@ async def update_nickname(body: UpdateNicknameRequest, auth=Depends(require_auth
     return {"profile": _profile_out(profile)}
 
 
+@router.get("/leaderboard")
+async def get_leaderboard(auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
+    # Registered above the dynamic /{player_id} route below so "leaderboard"
+    # is never swallowed as a player_id lookup.
+    result = await db.execute(select(Profile).order_by(Profile.total_score.desc()).limit(50))
+    profiles = result.scalars().all()
+    return {
+        "players": [
+            {"nickname": p.nickname, "player_id": p.player_id, "total_score": p.total_score, "wins": p.wins}
+            for p in profiles
+        ]
+    }
+
+
 @router.get("/{player_id}")
 async def get_public_profile(player_id: str, auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
     profile = (await db.execute(select(Profile).where(Profile.player_id == player_id))).scalar_one_or_none()

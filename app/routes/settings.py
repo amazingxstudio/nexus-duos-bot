@@ -13,6 +13,8 @@ class UpdateSettingsRequest(BaseModel):
     show_history_to_all: bool | None = None
     sound_enabled: bool | None = None
     haptics_enabled: bool | None = None
+    show_online_status: bool | None = None
+    show_exact_last_seen: bool | None = None
 
 
 @router.get("")
@@ -38,4 +40,5 @@ def _out(settings):
     return {
         "show_history_to_all": settings.show_history_to_all,
         "sound_enabled": settings.sound_enabled, "haptics_enabled": settings.haptics_enabled,
+        "show_online_status": settings.show_online_status, "show_exact_last_seen": settings.show_exact_last_seen,
     }
