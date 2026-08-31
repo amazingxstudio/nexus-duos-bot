@@ -21,6 +21,18 @@ logger = logging.getLogger("nexus_duos.db")
 # actually understands it, via connect_args below. This still works
 # unchanged for a plain Render/local Postgres URL with no query params.
 _url = make_url(settings.DATABASE_URL).set(drivername="postgresql+asyncpg", query={})
+_is_neon = "neon.tech" in settings.DATABASE_URL
+
+# Neon's "-pooler" endpoint (the one their dashboard hands you by default)
+# routes through PgBouncer in transaction-pooling mode, which does not
+# support server-side prepared statements — asyncpg uses those by default
+# for every query, so without this you'd hit
+# `DuplicatePreparedStatementError: prepared statement "__asyncpg_stmt_1__"
+# already exists` the moment two requests overlap. statement_cache_size=0
+# tells asyncpg to never prepare-and-cache, which is required behind a
+# transaction-mode pooler (and harmless — just a little slower per query —
+# against a direct, non-pooled connection).
+_connect_args = {"ssl": "require", "statement_cache_size": 0} if _is_neon else {}
 
 engine = create_async_engine(
     _url,
@@ -28,7 +40,7 @@ engine = create_async_engine(
     pool_pre_ping=True,  # Neon can idle its compute down; this discards a
                          # stale connection and reconnects instead of erroring.
     pool_recycle=300,
-    connect_args={"ssl": "require"} if "neon.tech" in settings.DATABASE_URL else {},
+    connect_args=_connect_args,
 )
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
