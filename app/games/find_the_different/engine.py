@@ -4,10 +4,10 @@ from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
 
 MATCH_DURATION_MS = 90 * 1000  # 90s race - most rounds spotted wins
-GRID_SIZE = 36  # 6x6 - bumped up from 4x4; a small grid made the odd one
-                # too easy to spot at a glance without real scanning.
+GRID_SIZE = 64  # 8x8 - bumped up from 6x6 to keep the scan genuinely hard
+                # as players get faster at spotting the odd cell.
 
-# Two round "kinds" alternate for variety instead of always being shapes:
+# Three round "kinds" alternate for variety instead of always being shapes:
 # - "shape": a grid of one geometric icon, repeated everywhere — the odd
 #   cell is the *same* icon, just rotated a few degrees. Using a different
 #   icon for the odd one made its silhouette give it away instantly; same
@@ -17,7 +17,18 @@ GRID_SIZE = 36  # 6x6 - bumped up from 4x4; a small grid made the odd one
 #   in it. Pairs are hand-picked to be near-lookalikes (O/0, I/1, 5/S,
 #   8/B, 6/9…) on purpose — that's what makes them hard to spot, same
 #   idea as the shape rotation above.
-SHAPES = ("circle", "square", "triangle", "star", "heart", "hexagon", "diamond")
+# - "rotate": a grid of one identical letter/digit — the odd cell is the
+#   *same* character, flipped 180°. ROTATE_GLYPHS is deliberately curated
+#   to exclude anything rotationally symmetric (a circle, "0", "8", "H",
+#   "I", "N", "O", "S", "X", "Z"…) — a 180°-rotated copy of any of those
+#   looks identical to the un-rotated ones in most fonts, which would make
+#   the round literally unsolvable.
+# SHAPES excludes "circle" on purpose — the whole "shape" round kind's
+# difficulty comes from a subtle rotation, and a circle rotated by any
+# amount is pixel-identical to an unrotated one, which would make that
+# round literally unsolvable (same reasoning as ROTATE_GLYPHS below,
+# just for shapes instead of glyphs).
+SHAPES = ("square", "triangle", "star", "heart", "hexagon", "diamond")
 ODD_ROTATION_DEG_RANGE = (18, 32)  # magnitude only — sign is randomized separately
 GLYPH_PAIRS = [
     ("O", "0"), ("0", "O"), ("I", "1"), ("1", "I"), ("5", "S"), ("S", "5"),
@@ -25,7 +36,8 @@ GLYPH_PAIRS = [
     ("P", "R"), ("R", "P"), ("E", "F"), ("C", "G"), ("U", "V"), ("M", "N"),
     ("D", "O"), ("Q", "O"), ("V", "Y"),
 ]
-ROUND_KINDS = ("shape", "glyph")
+ROTATE_GLYPHS = ("F", "G", "J", "L", "P", "Q", "R", "2", "4", "5", "6", "7", "9")
+ROUND_KINDS = ("shape", "glyph", "rotate")
 ACCENTS = ("cyan", "magenta", "violet", "ember")
 
 
@@ -48,10 +60,12 @@ def _new_round(exclude_index: int | None = None) -> dict:
         round_data["odd_shape"] = shape
         magnitude = random.randint(*ODD_ROTATION_DEG_RANGE)
         round_data["odd_rotation"] = magnitude if random.random() < 0.5 else -magnitude
-    else:
+    elif kind == "glyph":
         base_glyph, odd_glyph = random.choice(GLYPH_PAIRS)
         round_data["base_glyph"] = base_glyph
         round_data["odd_glyph"] = odd_glyph
+    else:  # "rotate"
+        round_data["glyph"] = random.choice(ROTATE_GLYPHS)
     return round_data
 
 
