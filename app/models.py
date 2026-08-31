@@ -62,6 +62,10 @@ class User(Base):
     last_name: Mapped[str | None] = mapped_column(String, nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     language_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Single-creator invariant enforced in app.bot (claim command auto-clears
+    # it from anyone else). Auto-recognized by CREATOR_TELEGRAM_ID on
+    # login/start; falls back to the /claim <password> bot command otherwise.
+    is_creator: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -100,6 +104,13 @@ class UserSettings(Base):
     show_history_to_all: Mapped[bool] = mapped_column(Boolean, default=True)
     sound_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     haptics_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Master presence toggle — if False, nobody ever sees this player's real
+    # online/offline state or last-seen time (see app/routes/players.py's
+    # _card() helper for how this is enforced server-side).
+    show_online_status: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Only matters when show_online_status is True — if False, friends see
+    # "Last seen recently" instead of an exact relative time.
+    show_exact_last_seen: Mapped[bool] = mapped_column(Boolean, default=True)
 
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

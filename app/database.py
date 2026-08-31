@@ -1,6 +1,7 @@
 import logging
 
 from sqlalchemy import inspect, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.schema import CreateColumn
@@ -9,12 +10,26 @@ from app.config import settings
 
 logger = logging.getLogger("nexus_duos.db")
 
-# Render/most managed Postgres URLs come as postgresql://... — asyncpg needs postgresql+asyncpg://
-_db_url = settings.DATABASE_URL
-if _db_url.startswith("postgresql://"):
-    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+# Neon's connection string looks like:
+#   postgresql://user:pass@ep-xxx.neon.tech/db?sslmode=require&channel_binding=require
+# asyncpg (unlike psycopg2) does NOT accept "sslmode" or "channel_binding" as
+# connect kwargs — passing them through raises
+# `TypeError: connect() got an unexpected keyword argument 'sslmode'` at the
+# very first query. So instead of a plain string-replace, this parses the
+# URL, strips every query param (whatever the provider put there), and
+# swaps the driver to asyncpg — then SSL is requested the way asyncpg
+# actually understands it, via connect_args below. This still works
+# unchanged for a plain Render/local Postgres URL with no query params.
+_url = make_url(settings.DATABASE_URL).set(drivername="postgresql+asyncpg", query={})
 
-engine = create_async_engine(_db_url, echo=False, pool_pre_ping=True)
+engine = create_async_engine(
+    _url,
+    echo=False,
+    pool_pre_ping=True,  # Neon can idle its compute down; this discards a
+                         # stale connection and reconnects instead of erroring.
+    pool_recycle=300,
+    connect_args={"ssl": "require"} if "neon.tech" in settings.DATABASE_URL else {},
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

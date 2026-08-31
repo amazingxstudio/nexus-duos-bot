@@ -45,6 +45,14 @@ async def disconnect(sid):
     await _notify_friends_of_status(user_id, False)
 
     async with AsyncSessionLocal() as db:
+        # Disconnect is the most accurate "last seen" moment for an active
+        # session — update it here in addition to the login-time update in
+        # routes/auth.py.
+        user = await db.get(User, user_id)
+        if user:
+            user.last_seen_at = datetime.now(timezone.utc)
+            await db.commit()
+
         result = await db.execute(
             select(Match)
             .where(Match.finished_at.is_(None))

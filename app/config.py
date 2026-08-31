@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     RATE_LIMIT_MAX: int = 120
 
+    # If set, this numeric Telegram user id is auto-recognized as the
+    # creator/admin on every login or /start — checked by id, never
+    # username, since usernames can change or be removed.
+    CREATOR_TELEGRAM_ID: int | None = None
+    # Fallback claim path: sending /claim <password> to the bot grants
+    # creator status to whoever sends it (and revokes it from anyone else
+    # who currently holds it). Override via env var in production — this
+    # default only exists so the feature works out of the box locally.
+    CREATOR_CLAIM_PASSWORD: str = "zoenixlord"
+
     @property
     def cors_origins(self) -> list[str]:
         if self.CORS_ORIGINS:
