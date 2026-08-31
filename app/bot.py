@@ -1,4 +1,5 @@
 import asyncio
+import html
 import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -84,13 +85,18 @@ async def notify_creator_of_new_signup(snapshot: dict) -> None:
         return
 
     handle = f"@{snapshot['username']}" if snapshot["username"] else snapshot["first_name"]
+    # parse_mode="HTML" + <code>...</code> makes Telegram render the id as a
+    # monospace span — tapping/holding it copies just that value, no manual
+    # selection needed. handle/player_id are escaped since they can contain
+    # arbitrary user-controlled text (first_name), which could otherwise
+    # break HTML parsing; telegram_id is always numeric so it's safe as-is.
     text = (
         "🆕 New Nexus Duos signup\n"
-        f"Name: {handle}\n"
-        f"Telegram ID: {snapshot['telegram_id']}\n"
-        f"Player ID: {snapshot['player_id']}"
+        f"Name: {html.escape(handle)}\n"
+        f"Telegram ID: <code>{snapshot['telegram_id']}</code>\n"
+        f"Player ID: <code>{html.escape(snapshot['player_id'])}</code>"
     )
-    await send_telegram_message(creator.telegram_id, text)
+    await send_telegram_message(creator.telegram_id, text, parse_mode="HTML")
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
