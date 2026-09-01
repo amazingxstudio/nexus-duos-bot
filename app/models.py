@@ -62,9 +62,8 @@ class User(Base):
     last_name: Mapped[str | None] = mapped_column(String, nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     language_code: Mapped[str | None] = mapped_column(String, nullable=True)
-    # Single-creator invariant enforced in app.bot (claim command auto-clears
-    # it from anyone else). Auto-recognized by CREATOR_TELEGRAM_ID on
-    # login/start; falls back to the /claim <password> bot command otherwise.
+    # Single-creator invariant, auto-recognized by CREATOR_TELEGRAM_ID on
+    # login/start (never by username, since those can change or be removed).
     is_creator: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

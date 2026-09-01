@@ -7,7 +7,6 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 from telegram.error import TelegramError
 
 from sqlalchemy import or_, select
-from sqlalchemy import update as sa_update
 
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -132,39 +131,6 @@ async def require_creator(update: Update) -> User | None:
         result = await db.execute(select(User).where(User.telegram_id == tg_user.id))
         user = result.scalar_one_or_none()
         return user if user and user.is_creator else None
-
-
-async def creator_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/claim <password> — fallback claim path. Grants creator status to
-    whoever sends the correct password, and revokes it from anyone else
-    currently holding it (single-creator invariant)."""
-    tg_user = update.effective_user
-    if not tg_user or not update.message:
-        return
-
-    password = " ".join(context.args).strip() if context.args else ""
-    if not password or password != settings.CREATOR_CLAIM_PASSWORD:
-        # Generic message on purpose — don't reveal anything else.
-        await update.message.reply_text("Incorrect password.")
-        return
-
-    try:
-        await bootstrap_user_profile(tg_user)
-    except Exception:
-        logger.exception("Failed to bootstrap user profile during /claim")
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).where(User.telegram_id == tg_user.id))
-        user = result.scalar_one_or_none()
-        if not user:
-            await update.message.reply_text("Something went wrong — try again.")
-            return
-
-        await db.execute(sa_update(User).where(User.id != user.id, User.is_creator.is_(True)).values(is_creator=False))
-        user.is_creator = True
-        await db.commit()
-
-    await update.message.reply_text("✅ Creator status claimed. You now have admin access.")
 
 
 PLAYERS_PAGE_SIZE = 8
@@ -343,7 +309,6 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 bot_application.add_handler(CommandHandler("start", start_command))
-bot_application.add_handler(CommandHandler("claim", creator_claim))
 bot_application.add_handler(CommandHandler("players", players_command))
 bot_application.add_handler(CommandHandler("broadcast", broadcast_command))
 bot_application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern=r"^admin_(players_page|player):"))
