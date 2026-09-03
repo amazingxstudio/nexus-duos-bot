@@ -5,6 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Room, RoomStatus, GameVote, Game, Match, MatchMode, GameKey
 from app.room_code import generate_room_code
+from app.games.ai.difficulty import AIDifficulty
+from app.games.ai.bots import get_bot_user_id
+from app.games.ai.registry import is_practice_ai_game
 
 
 async def create_room(db: AsyncSession, player1_id: str, preset_game_key: str | None = None) -> Room:
@@ -55,6 +58,59 @@ async def join_room(db: AsyncSession, code: str, player2_id: str):
     await db.commit()
     await db.refresh(room)
     return room, None
+
+
+async def create_practice_room(db: AsyncSession, user_id: str, game_key: str, difficulty: str):
+    """Practice vs AI: unlike create_room()/join_room(), this returns a
+    room that's already fully paired and past voting — the 'opponent' is
+    one of the 3 seeded bot accounts (app/games/ai/bots.py), joined and
+    READY_CHECK'd in the same call, since there's no second human to wait
+    on or vote against. The bot's own ready-tap is simulated shortly after
+    the human's (see sockets.py's player_ready handler) rather than here,
+    so the ready-check screen still gets a beat to render.
+
+    Only games with a real AI policy wired up (currently Connect Four and
+    Dots and Boxes — see app/games/ai/registry.py) are offered here.
+    """
+    try:
+        key_enum = GameKey(game_key)
+    except ValueError:
+        raise ValueError("UNKNOWN_GAME")
+    if not is_practice_ai_game(key_enum):
+        raise ValueError("GAME_NOT_AVAILABLE_FOR_PRACTICE")
+
+    try:
+        difficulty_enum = AIDifficulty(difficulty)
+    except ValueError:
+        raise ValueError("UNKNOWN_DIFFICULTY")
+
+    bot_user_id = get_bot_user_id(difficulty_enum)
+    if not bot_user_id:
+        raise ValueError("AI_NOT_READY")
+
+    game_result = await db.execute(select(Game).where(Game.key == key_enum))
+    game = game_result.scalar_one_or_none()
+    if not game:
+        raise ValueError("GAME_NOT_FOUND")
+
+    room = Room(
+        code=generate_room_code(),
+        player1_id=user_id,
+        player2_id=bot_user_id,
+        game_id=game.id,
+        preset_game_key=key_enum,
+        status=RoomStatus.READY_CHECK,
+    )
+    db.add(room)
+    await db.flush()
+
+    match = Match(room_id=room.id, game_id=game.id, mode=MatchMode.PRACTICE_AI, player1_id=user_id, player2_id=bot_user_id)
+    db.add(match)
+
+    await db.commit()
+    await db.refresh(room)
+    await db.refresh(match)
+    return room, match
 
 
 def resolve_game_selection(player1_picks: list[str], player2_picks: list[str]) -> dict:

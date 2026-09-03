@@ -1,16 +1,24 @@
+import asyncio
 import logging
+import random
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 
 from app.socketio_app import sio
 from app.security import verify_session_token
-from app.cache import set_user_online, set_user_offline
+from app.cache import (
+    set_user_online, set_user_offline,
+    register_invite_decline, clear_invite_decline_streak, is_invite_blocked,
+)
 from app.database import AsyncSessionLocal
 from app.models import Room, Match, Game, GameKey, RoomStatus, Profile, Friend, User
 from app.games.engine.registry import get_game_engine, is_game_implemented
 from app.games.engine.match_runner import start_match, handle_game_action, handle_player_disconnect, leave_match
 from app.matchmaking import create_room, join_room
+from app.games.ai.bots import is_ai_bot
+from app.capacity import ensure_capacity_available
+from app.messaging import send_message, are_friends
 
 logger = logging.getLogger("nexus_duos.sockets")
 
@@ -87,6 +95,18 @@ async def player_ready(sid, data):
         return
 
     await sio.emit("player_ready", {"user_id": user_id}, room=f"room:{room.code}")
+
+    # Practice vs AI: there's no second real socket to tap "I'm Ready" —
+    # simulate it landing shortly after the human's own tap (rather than
+    # in the same instant) so the ready-check screen doesn't look broken
+    # by resolving in the same frame it appeared.
+    if room.player2_id and is_ai_bot(room.player2_id) and user_id != room.player2_id:
+        asyncio.create_task(_ai_player_ready(room.code, room.player2_id))
+
+
+async def _ai_player_ready(room_code: str, bot_user_id: str) -> None:
+    await asyncio.sleep(random.uniform(0.5, 1.2))
+    await sio.emit("player_ready", {"user_id": bot_user_id}, room=f"room:{room_code}")
 
 
 @sio.on("game_started")
@@ -200,6 +220,37 @@ async def _notify_friends_of_status(user_id: str, online: bool):
         await sio.emit("friend_status_changed", {"user_id": user_id, "online": online}, room=f"user:{w.user_id}")
 
 
+# ---- Direct messages (Friends list "Message" button — spec D.14) -------
+
+@sio.on("dm:send")
+async def dm_send(sid, data):
+    session = await sio.get_session(sid)
+    from_user_id = session["user_id"]
+    to_user_id = (data or {}).get("to_user_id")
+    content = ((data or {}).get("content") or "").strip()
+    if not to_user_id or not content:
+        return
+    content = content[:500]  # matches routes/messages.py's SendMessageRequest cap
+
+    async with AsyncSessionLocal() as db:
+        if not await are_friends(db, from_user_id, to_user_id):
+            return
+        sender_profile = (await db.execute(select(Profile).where(Profile.user_id == from_user_id))).scalar_one_or_none()
+        message = await send_message(db, from_user_id, to_user_id, content)
+
+    payload = {
+        "id": message.id,
+        "sender_id": from_user_id,
+        "content": message.content,
+        "created_at": message.created_at.isoformat() if message.created_at else None,
+        "sender_nickname": sender_profile.nickname if sender_profile else None,
+    }
+    # Echoed back to the sender too — lets their own panel confirm delivery
+    # (and pick up the server-assigned id/timestamp) without a REST round trip.
+    await sio.emit("dm:received", payload, room=f"user:{to_user_id}")
+    await sio.emit("dm:sent", payload, room=f"user:{from_user_id}")
+
+
 # ---- Duel invites (friend list "Invite to Duel" + post-match "Duel Again") --
 #
 # An invite optionally carries a preset game_key: the inviter picked a
@@ -236,6 +287,12 @@ async def invite_send(sid, data):
     if not to_user_id:
         return
 
+    # Spam guard (spec D.16b): 3 consecutive declines from to_user_id
+    # blocks from_user_id's invites to them for 1 minute. See cache.py.
+    if await is_invite_blocked(from_user_id, to_user_id):
+        await sio.emit("invite:blocked", {"to_user_id": to_user_id}, room=f"user:{from_user_id}")
+        return
+
     async with AsyncSessionLocal() as db:
         profile = (await db.execute(select(Profile).where(Profile.user_id == from_user_id))).scalar_one_or_none()
         if not profile:
@@ -264,6 +321,19 @@ async def invite_accept(sid, data):
         return
 
     async with AsyncSessionLocal() as db:
+        # Capacity gate (spec C.10) — checked here too, not just the REST
+        # create/quick routes, since an accepted invite/rematch also
+        # creates a brand-new room under the hood via create_room below.
+        try:
+            await ensure_capacity_available(db)
+        except ValueError:
+            await sio.emit("invite:server_full", {}, room=f"user:{accepter_id}")
+            await sio.emit("invite:server_full", {}, room=f"user:{from_user_id}")
+            return
+
+        # An acceptance breaks any decline streak between this pair.
+        await clear_invite_decline_streak(from_user_id, accepter_id)
+
         game_key, _ = await _valid_game_key(db, (data or {}).get("game_key"))
         room = await create_room(db, from_user_id, preset_game_key=game_key)
         room, match = await join_room(db, room.code, accepter_id)
@@ -281,3 +351,7 @@ async def invite_decline(sid, data):
     if not from_user_id:
         return
     await sio.emit("invite:declined", {"by_user_id": decliner_id}, room=f"user:{from_user_id}")
+
+    # Spam guard (spec D.16b) — counts this as the Nth consecutive decline
+    # against from_user_id and sets the 1-minute block once it hits 3.
+    await register_invite_decline(from_user_id, decliner_id)
