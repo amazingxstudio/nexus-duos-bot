@@ -7,7 +7,8 @@ from app.database import get_db
 from app.dependencies import require_auth
 from app.models import Room, User, Profile, Game, Match
 from app.schemas import JoinRoomRequest, SubmitPicksRequest, SubmitTieBreakRequest
-from app.matchmaking import create_room, join_room, submit_vote_picks, submit_tie_break_vote
+from app.matchmaking import create_room, join_room, submit_vote_picks, submit_tie_break_vote, create_practice_room
+from app.capacity import ensure_capacity_available
 from app.socketio_app import sio
 from app.bot import send_telegram_message, delete_telegram_message
 
@@ -16,6 +17,11 @@ router = APIRouter()
 
 class QuickDuelRequest(BaseModel):
     game_key: str
+
+
+class PracticeRoomRequest(BaseModel):
+    game_key: str
+    difficulty: str
 
 
 def _player_out(user: User | None, profile: Profile | None):
@@ -51,6 +57,13 @@ async def _room_response(db: AsyncSession, room: Room) -> dict:
 
 @router.post("")
 async def create_room_route(auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
+    # Gate BEFORE creating anything — see app/capacity.py's docstring for
+    # why this is checked here (room creation) rather than at match-start.
+    try:
+        await ensure_capacity_available(db)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
     room = await create_room(db, auth["user_id"])
     message_id = await send_telegram_message(
         int(auth["telegram_id"]),
@@ -66,6 +79,11 @@ async def create_room_route(auth=Depends(require_auth), db: AsyncSession = Depen
 @router.post("/quick")
 async def quick_duel_route(body: QuickDuelRequest, auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
     """Tap-a-game-on-Home flow: creates a room pre-locked to one game — no voting once player2 joins."""
+    try:
+        await ensure_capacity_available(db)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
     room = await create_room(db, auth["user_id"], preset_game_key=body.game_key)
     message_id = await send_telegram_message(
         int(auth["telegram_id"]),
@@ -75,6 +93,26 @@ async def quick_duel_route(body: QuickDuelRequest, auth=Depends(require_auth), d
     if message_id:
         room.telegram_message_id = message_id
         await db.commit()
+    return {"room": await _room_response(db, room)}
+
+
+@router.post("/practice")
+async def create_practice_room_route(body: PracticeRoomRequest, auth=Depends(require_auth), db: AsyncSession = Depends(get_db)):
+    """Practice vs AI: unlike /rooms and /rooms/quick, this never sends a
+    'share this code' Telegram DM — there's no second human to invite, the
+    room comes back already fully paired with the bot and READY_CHECK'd.
+    Still gated by the same capacity check as a real duel: a practice
+    match runs its own active-match timer/AI-poll loop just like a ranked
+    one does, so it counts against the same concurrency budget."""
+    try:
+        await ensure_capacity_available(db)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    try:
+        room, _match = await create_practice_room(db, auth["user_id"], body.game_key, body.difficulty)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"room": await _room_response(db, room)}
 
 
