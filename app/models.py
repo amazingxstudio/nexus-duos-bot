@@ -203,3 +203,38 @@ class Match(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class ProfileVisit(Base):
+    """One row per (profile_owner, visitor) pair — re-visiting just bumps
+    visited_at instead of stacking up duplicate rows, so "most recent 3
+    visitors" is a plain ORDER BY visited_at DESC LIMIT 3 against this
+    table. Written by routes/profile.py's get_public_profile every time
+    someone other than the owner views a profile (never on the owner's own
+    /profile/me view). Additive-only table — created automatically by
+    database.py's create_all(), no migration script needed."""
+    __tablename__ = "profile_visits"
+    __table_args__ = (UniqueConstraint("profile_owner_id", "visitor_id", name="uq_profile_visit_pair"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_id)
+    profile_owner_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    visitor_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"))
+    visited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class DirectMessage(Base):
+    """A chat message between two friends — Friends list "Message" button,
+    see app/messaging.py. Deliberately NOT modeled with a separate
+    Conversation table: with exactly two participants per pair and a hard
+    20-message cap enforced at write time (messaging.py's HISTORY_LIMIT),
+    querying by (sender_id, receiver_id) OR (receiver_id, sender_id) is
+    simple and cheap enough that the extra join buys nothing. Rows older
+    than 24h are swept by app/cleanup.py's periodic pass regardless of the
+    per-pair cap."""
+    __tablename__ = "direct_messages"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_id)
+    sender_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    receiver_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    content: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

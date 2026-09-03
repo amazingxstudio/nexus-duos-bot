@@ -3,14 +3,14 @@ import html
 import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, ContextTypes, filters
 from telegram.error import TelegramError
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, func, text
 
 from app.config import settings
 from app.database import AsyncSessionLocal
-from app.models import Game, Match, Profile, User, UserSettings
+from app.models import Game, Match, Profile, User, UserSettings, Room, RoomStatus
 from app.room_code import generate_player_id
 
 logger = logging.getLogger("nexus_duos.bot")
@@ -89,13 +89,13 @@ async def notify_creator_of_new_signup(snapshot: dict) -> None:
     # selection needed. handle/player_id are escaped since they can contain
     # arbitrary user-controlled text (first_name), which could otherwise
     # break HTML parsing; telegram_id is always numeric so it's safe as-is.
-    text = (
+    text_out = (
         "🆕 New Nexus Duos signup\n"
         f"Name: {html.escape(handle)}\n"
         f"Telegram ID: <code>{snapshot['telegram_id']}</code>\n"
         f"Player ID: <code>{html.escape(snapshot['player_id'])}</code>"
     )
-    await send_telegram_message(creator.telegram_id, text, parse_mode="HTML")
+    await send_telegram_message(creator.telegram_id, text_out, parse_mode="HTML")
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -115,6 +115,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"Welcome to Nexus Duos, {tg_user.first_name}! ⚡\n\nChallenge a friend to a real-time duel.",
         reply_markup=keyboard,
     )
+
+
+# ---- Plain-text fallback (spec B.7) --------------------------------------
+#
+# Anything sent to the bot that ISN'T a recognized command (a stray "hi",
+# an emoji, someone trying to chat with it) gets this one fixed reply
+# instead of silently vanishing — registered last, and filtered to
+# ~filters.COMMAND so it never intercepts /start, /players, /broadcast, or
+# /stats (those are matched by their own CommandHandlers above it).
+
+NO_ACTION_REPLY = "ဒီလိုမက်ဆေ့ခ်ျအတွက် ဘာမှ လုပ်ပေးနိုင်တာ မရှိပါဘူး"
+
+
+async def fallback_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.text:
+        return
+    await update.message.reply_text(NO_ACTION_REPLY)
 
 
 # ---- Creator / admin system ----
@@ -164,8 +181,8 @@ async def _render_players_page(page: int) -> tuple[str, InlineKeyboardMarkup]:
     if nav_row:
         keyboard.append(nav_row)
 
-    text = f"👥 Registered players — page {page + 1}" if rows else "No players found."
-    return text, InlineKeyboardMarkup(keyboard)
+    text_out = f"👥 Registered players — page {page + 1}" if rows else "No players found."
+    return text_out, InlineKeyboardMarkup(keyboard)
 
 
 async def _render_player_detail(user_id: str, back_page: int) -> tuple[str, InlineKeyboardMarkup]:
@@ -242,8 +259,8 @@ async def players_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("Not authorized.")
         return
 
-    text, markup = await _render_players_page(0)
-    await update.message.reply_text(text, reply_markup=markup)
+    text_out, markup = await _render_players_page(0)
+    await update.message.reply_text(text_out, reply_markup=markup)
 
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -262,12 +279,12 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     try:
         if data.startswith("admin_players_page:"):
             page = int(data.split(":", 1)[1])
-            text, markup = await _render_players_page(page)
-            await query.edit_message_text(text, reply_markup=markup)
+            text_out, markup = await _render_players_page(page)
+            await query.edit_message_text(text_out, reply_markup=markup)
         elif data.startswith("admin_player:"):
             _, user_id, page_str = data.split(":", 2)
-            text, markup = await _render_player_detail(user_id, int(page_str))
-            await query.edit_message_text(text, reply_markup=markup)
+            text_out, markup = await _render_player_detail(user_id, int(page_str))
+            await query.edit_message_text(text_out, reply_markup=markup)
     except TelegramError:
         # e.g. "message is not modified" from a double-tap — harmless.
         logger.warning("Admin callback edit failed for %s", data)
@@ -308,10 +325,58 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.message.reply_text(f"Sent to {sent} of {total} users.")
 
 
+# ---- Creator /stats command (spec B.8) -----------------------------------
+#
+# The other three creator-only stats the spec asks for (total accounts,
+# active matches, DB storage %) live here as one combined command rather
+# than three separate ones — /broadcast above already covers the fourth
+# requirement. Non-creator callers get the same "Not authorized." reply
+# /players and /broadcast already use, for consistency.
+
+async def _compute_stats() -> dict:
+    async with AsyncSessionLocal() as db:
+        total_users = await db.scalar(select(func.count()).select_from(User)) or 0
+        active_matches = await db.scalar(
+            select(func.count()).select_from(Room).where(Room.status.not_in((RoomStatus.FINISHED, RoomStatus.ABANDONED)))
+        ) or 0
+        db_size_bytes = await db.scalar(text("SELECT pg_database_size(current_database())"))
+
+    db_size_mb = (db_size_bytes or 0) / (1024 * 1024)
+    storage_pct = round((db_size_mb / settings.NEON_STORAGE_LIMIT_MB) * 100, 1) if settings.NEON_STORAGE_LIMIT_MB else 0.0
+    return {
+        "total_users": total_users,
+        "active_matches": active_matches,
+        "db_size_mb": round(db_size_mb, 1),
+        "storage_pct": storage_pct,
+    }
+
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    creator = await require_creator(update)
+    if not creator:
+        await update.message.reply_text("Not authorized.")
+        return
+
+    stats = await _compute_stats()
+    text_out = (
+        "📊 Nexus Duos stats\n"
+        f"Accounts: {stats['total_users']}\n"
+        f"Active matches: {stats['active_matches']}\n"
+        f"DB storage: {stats['db_size_mb']} MB / {settings.NEON_STORAGE_LIMIT_MB} MB ({stats['storage_pct']}%)"
+    )
+    await update.message.reply_text(text_out)
+
+
 bot_application.add_handler(CommandHandler("start", start_command))
 bot_application.add_handler(CommandHandler("players", players_command))
 bot_application.add_handler(CommandHandler("broadcast", broadcast_command))
+bot_application.add_handler(CommandHandler("stats", stats_command))
 bot_application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern=r"^admin_(players_page|player):"))
+# Registered last, and filtered to exclude commands, so it only ever
+# catches plain text that didn't match one of the CommandHandlers above.
+bot_application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, fallback_text_handler))
 
 
 def build_bot_application() -> Application:
