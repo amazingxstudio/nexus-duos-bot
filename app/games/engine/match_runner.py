@@ -10,6 +10,8 @@ from app.models import Match, Profile, MatchResult, MatchMode, Room, RoomStatus
 from app.socketio_app import sio
 from app.games.engine.utils import now_ms
 from app.history_cleanup import prune_old_matches
+from app.games.ai.bots import get_difficulty_for_user
+from app.games.ai.runner import start_ai_loop, cancel_ai_task
 
 logger = logging.getLogger("nexus_duos.engine")
 
@@ -43,6 +45,16 @@ async def start_match(engine, match_id: str, room_code: str, player_ids: list[st
 
     task = asyncio.create_task(_run_timer(engine, match_id, room_code, engine.duration_ms))
     _active_timers[match_id] = task
+
+    # Practice vs AI: exactly one of the two players is a seeded bot
+    # account (see app/games/ai/bots.py) — if so, spawn the task that
+    # plays its moves. A no-op for a normal duel (neither player_id
+    # resolves to a difficulty) and, right now, for any game other than
+    # Connect Four / Dots and Boxes (get_ai_policy has no entry for it —
+    # see app/games/ai/registry.py).
+    ai_user_id = next((uid for uid in player_ids if get_difficulty_for_user(uid)), None)
+    if ai_user_id:
+        start_ai_loop(engine, match_id, ai_user_id, get_difficulty_for_user(ai_user_id))
 
     return state
 
@@ -97,6 +109,7 @@ async def finish_match(engine, match_id: str, forced_result: dict | None = None)
     task = _active_timers.pop(match_id, None)
     if task:
         task.cancel()
+    cancel_ai_task(match_id)
 
     # forced_result lets a forfeit declare a winner regardless of the score
     # at the moment the other player left — normal completion still goes
@@ -209,6 +222,7 @@ async def leave_match(engine, match_id: str, leaving_user_id: str) -> None:
     task = _active_timers.pop(match_id, None)
     if task:
         task.cancel()
+    cancel_ai_task(match_id)
 
     async with AsyncSessionLocal() as db:
         match = await db.get(Match, match_id)
