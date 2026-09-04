@@ -140,11 +140,12 @@ class WordChainEngine(BaseGameEngine):
     """Turn-based, not simultaneous: players alternate, and whoever's turn
     it is has TURN_SECONDS to submit a valid link - starting with the
     current word's last letter, drawn from the known noun list, and not
-    already used this match. Speed matters: answering quickly scores more,
-    answering after the 4s mark costs points (capped, so a slow round
-    never feels crushing), and going completely silent for
-    TURN_SECONDS + MAX_OVERTIME_SECONDS auto-skips the turn with a small
-    penalty so the game can never stall on one player.
+    already used this match. Speed matters: answering quickly scores more
+    (a decaying bonus down to TURN_SECONDS), answering after that scores 0
+    instead of the bonus, and going completely silent for
+    TURN_SECONDS + MAX_OVERTIME_SECONDS auto-skips the turn to the other
+    player, also for 0 - never a score deduction either way (the minus/
+    penalty system was removed; scores here only ever go up or stay flat).
 
     turn_started_at (server ms) rides along in the payload so both clients
     can render the same countdown, and either client may report a timeout
@@ -167,7 +168,7 @@ class WordChainEngine(BaseGameEngine):
             "used_words": [start],
             "turn_user_id": None,
             "turn_started_at": None,
-            "last_turn_delta": None,  # {"user_id", "points"} - lets the client flash "+4" / "-2"
+            "last_turn_delta": None,  # {"user_id", "points"} - lets the client flash "+4" / "0"
         }
 
     def on_match_start(self, state: dict) -> None:
@@ -186,9 +187,10 @@ class WordChainEngine(BaseGameEngine):
             if elapsed_ms < (TURN_SECONDS + MAX_OVERTIME_SECONDS) * 1000 - GRACE_MS:
                 raise ValueError("TOO_EARLY")
             timed_out_user = payload["turn_user_id"]
-            new_score = max(0, state["players"][timed_out_user]["score"] - 2)
-            state["players"][timed_out_user]["score"] = new_score
-            payload["last_turn_delta"] = {"user_id": timed_out_user, "points": -2, "reason": "TIMEOUT"}
+            # No penalty (minus/penalty system removed) - a stalled turn
+            # just passes to the other player for 0 points, never a
+            # deduction from the timed-out player's score.
+            payload["last_turn_delta"] = {"user_id": timed_out_user, "points": 0, "reason": "TIMEOUT"}
             self._advance_turn(state)
             return state
 
@@ -216,10 +218,12 @@ class WordChainEngine(BaseGameEngine):
             capped = min(elapsed_sec, TURN_SECONDS)
             points = max(1, round(5 - capped))
         else:
-            overtime = elapsed_sec - TURN_SECONDS
-            points = -min(3, max(1, round(overtime)))
+            # Answered late (past TURN_SECONDS but within the overtime
+            # grace window) still counts as a valid link - it just misses
+            # the quick-answer bonus (0 points) rather than losing points.
+            points = 0
 
-        state["players"][user_id]["score"] = max(0, state["players"][user_id]["score"] + points)
+        state["players"][user_id]["score"] = state["players"][user_id]["score"] + points
         payload["last_turn_delta"] = {"user_id": user_id, "points": points, "reason": "ANSWER"}
         payload["round"] += 1
         payload["current_word"] = word
