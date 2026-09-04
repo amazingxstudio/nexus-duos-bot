@@ -3,8 +3,14 @@ from collections import deque
 
 from app.models import GameKey
 from app.games.engine.base import BaseGameEngine
+from app.games.engine.utils import now_ms
 
 MATCH_DURATION_MS = 90 * 1000  # 90s race - most words guessed wins
+
+# Auto-skip a stuck word (spec D.21a) - mirrors quick_math's engine.py.
+ROUND_TIMEOUT_MS = 8000
+ROUND_TIMEOUT_GRACE_MS = 300
+MAX_WRONG_ATTEMPTS = 5
 
 # (clue, answer) pairs - kept to common, unambiguous everyday nouns.
 WORDS = [
@@ -68,7 +74,14 @@ class GuessTheWordEngine(BaseGameEngine):
     server-side only - sanitize_payload_for_client strips it before every
     broadcast, exactly like the base class's own "Code Breaker" example
     describes. A module-level recency buffer avoids repeating a
-    clue/answer pair too soon, within a match or across the next few."""
+    clue/answer pair too soon, within a match or across the next few.
+
+    A stuck word never blocks the match: either client may report
+    ROUND_TIMEOUT_MS of silence (the "round_timeout" action, server-time-
+    validated the same way word_chain's turn_timeout is), and each wrong
+    guess reports itself via "wrong_attempt" so the server can track both
+    players' attempt counts - once both hit MAX_WRONG_ATTEMPTS the word is
+    skipped immediately rather than waiting out the timeout too."""
 
     game_key = GameKey.GUESS_THE_WORD
     duration_ms = MATCH_DURATION_MS
@@ -82,9 +95,24 @@ class GuessTheWordEngine(BaseGameEngine):
         return {k: v for k, v in payload.items() if k != "word"}
 
     def apply_action(self, state: dict, user_id: str, action_type: str, data: dict) -> dict:
+        payload = state["payload"]
+
+        if action_type == "wrong_attempt":
+            attempts = payload.setdefault("wrong_attempts", {})
+            attempts[user_id] = attempts.get(user_id, 0) + 1
+            if all(attempts.get(uid, 0) >= MAX_WRONG_ATTEMPTS for uid in state["players"]):
+                self._skip_round(state, reason="MUTUAL_FAIL")
+            return state
+
+        if action_type == "round_timeout":
+            elapsed_ms = now_ms() - payload["round_started_at"]
+            if elapsed_ms < ROUND_TIMEOUT_MS - ROUND_TIMEOUT_GRACE_MS:
+                raise ValueError("TOO_EARLY")
+            self._skip_round(state, reason="TIMEOUT")
+            return state
+
         if action_type != "submit_guess":
             return state
-        payload = state["payload"]
 
         guess = data.get("guess")
         if not isinstance(guess, str):
@@ -98,6 +126,13 @@ class GuessTheWordEngine(BaseGameEngine):
         state["payload"] = self._round_payload(payload["round"] + 1, clue, word)
         return state
 
+    def _skip_round(self, state: dict, reason: str) -> None:
+        payload = state["payload"]
+        clue, word = self._new_word(exclude=payload["word"])
+        new_payload = self._round_payload(payload["round"] + 1, clue, word)
+        new_payload["last_skip_reason"] = reason
+        state["payload"] = new_payload
+
     @staticmethod
     def _round_payload(round_no: int, clue: str, word: str) -> dict:
         return {
@@ -107,6 +142,9 @@ class GuessTheWordEngine(BaseGameEngine):
             "word_length": len(word),
             "first_letter": word[0].upper(),
             "last_letter": word[-1].upper(),
+            "round_started_at": now_ms(),
+            "wrong_attempts": {},
+            "last_skip_reason": None,
         }
 
     @classmethod
