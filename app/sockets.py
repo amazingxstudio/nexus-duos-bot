@@ -236,6 +236,7 @@ async def dm_send(sid, data):
         if not await are_friends(db, from_user_id, to_user_id):
             return
         sender_profile = (await db.execute(select(Profile).where(Profile.user_id == from_user_id))).scalar_one_or_none()
+        sender_user = await db.get(User, from_user_id)
         message = await send_message(db, from_user_id, to_user_id, content)
 
     payload = {
@@ -244,6 +245,10 @@ async def dm_send(sid, data):
         "content": message.content,
         "created_at": message.created_at.isoformat() if message.created_at else None,
         "sender_nickname": sender_profile.nickname if sender_profile else None,
+        # Lets the recipient's incoming-message notification banner show an
+        # avatar without a second round trip — added alongside sender_nickname
+        # above for the same reason (frontend notification toast, spec D.14a).
+        "sender_photo_url": sender_user.photo_url if sender_user else None,
     }
     # Echoed back to the sender too — lets their own panel confirm delivery
     # (and pick up the server-assigned id/timestamp) without a REST round trip.
